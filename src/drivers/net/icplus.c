@@ -81,6 +81,94 @@ static int icplus_reset ( struct icplus_nic *icp ) {
 
 /******************************************************************************
  *
+ * EEPROM interface
+ *
+ ******************************************************************************
+ */
+
+/**
+ * Read data from EEPROM
+ *
+ * @v nvs		NVS device
+ * @v address		Address from which to read
+ * @v data		Data buffer
+ * @v len		Length of data buffer
+ * @ret rc		Return status code
+ */
+static int icplus_read_eeprom ( struct nvs_device *nvs, unsigned int address,
+				void *data, size_t len ) {
+	struct icplus_nic *icp =
+		container_of ( nvs, struct icplus_nic, eeprom );
+	unsigned int i;
+	uint16_t eepromctrl;
+	uint16_t *data_word = data;
+
+	/* Sanity check.  We advertise a blocksize of one word, so
+	 * should only ever receive single-word requests.
+	 */
+	assert ( len == sizeof ( *data_word ) );
+
+	/* Initiate read */
+	writew ( ( ICP_EEPROMCTRL_OPCODE_READ |
+		   ICP_EEPROMCTRL_ADDRESS ( address ) ),
+		 ( icp->regs + ICP_EEPROMCTRL ) );
+
+	/* Wait for read to complete */
+	for ( i = 0 ; i < ICP_EEPROM_MAX_WAIT_MS ; i++ ) {
+
+		/* If read is not complete, delay 1ms and retry */
+		eepromctrl = readw ( icp->regs + ICP_EEPROMCTRL );
+		if ( eepromctrl & ICP_EEPROMCTRL_BUSY ) {
+			mdelay ( 1 );
+			continue;
+		}
+
+		/* Extract data */
+		*data_word = cpu_to_le16 ( readw ( icp->regs + ICP_EEPROMDATA ));
+		return 0;
+	}
+
+	DBGC ( icp, "ICPLUS %p timed out waiting for EEPROM read\n", icp );
+	return -ETIMEDOUT;
+}
+
+/**
+ * Write data to EEPROM
+ *
+ * @v nvs		NVS device
+ * @v address		Address to which to write
+ * @v data		Data buffer
+ * @v len		Length of data buffer
+ * @ret rc		Return status code
+ */
+static int icplus_write_eeprom ( struct nvs_device *nvs,
+				 unsigned int address __unused,
+				 const void *data __unused,
+				 size_t len __unused ) {
+	struct icplus_nic *icp =
+		container_of ( nvs, struct icplus_nic, eeprom );
+
+	DBGC ( icp, "ICPLUS %p EEPROM write not supported\n", icp );
+	return -ENOTSUP;
+}
+
+/**
+ * Initialise EEPROM
+ *
+ * @v icp		IC+ device
+ */
+static void icplus_init_eeprom ( struct icplus_nic *icp ) {
+
+	/* The hardware supports only single-word reads */
+	icp->eeprom.word_len_log2 = ICP_EEPROM_WORD_LEN_LOG2;
+	icp->eeprom.size = ICP_EEPROM_MIN_SIZE_WORDS;
+	icp->eeprom.block_size = 1;
+	icp->eeprom.read = icplus_read_eeprom;
+	icp->eeprom.write = icplus_write_eeprom;
+}
+
+/******************************************************************************
+ *
  * Link state
  *
  ******************************************************************************
@@ -223,6 +311,17 @@ static int icplus_probe ( struct pci_device *pci ) {
 	if ( ( rc = icplus_reset ( icp ) ) != 0 )
 		goto err_reset;
 
+	/* Initialise EEPROM */
+	icplus_init_eeprom ( icp );
+
+	/* Read EEPROM MAC address */
+	if ( ( rc = nvs_read ( &icp->eeprom, ICP_EEPROM_MAC,
+			       netdev->hw_addr, ETH_ALEN ) ) != 0 ) {
+		DBGC ( icp, "ICPLUS %p could not read EEPROM MAC address: %s\n",
+		       icp, strerror ( rc ) );
+		goto err_eeprom;
+	}
+
 	/* Register network device */
 	if ( ( rc = register_netdev ( netdev ) ) != 0 )
 		goto err_register_netdev;
@@ -234,6 +333,7 @@ static int icplus_probe ( struct pci_device *pci ) {
 
 	unregister_netdev ( netdev );
  err_register_netdev:
+ err_eeprom:
 	icplus_reset ( icp );
  err_reset:
 	iounmap ( icp->regs );
