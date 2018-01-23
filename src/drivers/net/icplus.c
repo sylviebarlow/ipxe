@@ -192,6 +192,45 @@ static void icplus_check_link ( struct net_device *netdev ) {
  *
  ******************************************************************************
  */
+static int icplus_create_tx ( struct icplus_nic *icp ) {
+	size_t len = ( sizeof ( icp->tx.entry[0] ) * ICP_TX_NUM );
+	int rc;
+	unsigned int i;
+	struct icplus_tx_descriptor *txd;
+	struct icplus_tx_descriptor *next;
+
+	/* Allocate descriptor ring */
+	icp->tx.entry = malloc_dma ( len, ICP_ALIGN );
+	if ( ! icp->tx.entry ) {
+		rc = -ENOMEM;
+		goto err_alloc;
+	}
+
+	/* Initialise descriptor ring */
+	memset ( icp->tx.entry, 0, len );
+	for ( i = 0 ; i < ICP_TX_NUM ; i++ ) {
+		txd = &icp->tx.entry[i];
+		next = &icp->tx.entry[ ( i + 1 ) % ICP_TX_NUM ];
+		txd->next = cpu_to_le64 ( virt_to_bus ( next ) );
+		txd->flags = ( ICP_TX_UNALIGN | ICP_TX_INDICATE );
+		txd->control = ( ICP_TX_SOLE_FRAG | ICP_TX_DONE );
+	}
+
+	return 0;
+
+	free_dma ( icp->tx.entry, len );
+	icp->tx.entry = NULL;
+ err_alloc:
+	return rc;
+}
+
+static void icplus_destroy_tx ( struct icplus_nic *icp ) {
+	size_t len = ( sizeof ( icp->tx.entry[0] ) * ICP_TX_NUM );
+
+	/* Free descriptor ring */
+	free_dma ( icp->tx.entry, len );
+	icp->tx.entry = NULL;
+}
 
 /**
  * Open network device

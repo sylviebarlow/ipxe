@@ -14,6 +14,9 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 /** BAR size */
 #define ICP_BAR_SIZE 0x200
 
+/** Alignment requirement */
+#define ICP_ALIGN 0x8
+
 /** ASIC control register (double word) */
 #define ICP_ASICCTRL 0x30
 #define ICP_ASICCTRL_GLOBALRESET	0x00010000UL	/**< Global Reset */
@@ -45,12 +48,113 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 /** EEPROM data register (word) */
 #define ICP_EEPROMDATA 0x48
 
+/** Data fragment */
+union icplus_fragment {
+	/** Address of data */
+	uint64_t address;
+	/** Length */
+	struct {
+		/** Reserved */
+		uint8_t reserved[6];
+		/** Length of data */
+		uint16_t len;
+	};
+};
+
+/** Transmit descriptor */
+struct icplus_tx_descriptor {
+	/** Address of next descriptor */
+	uint64_t next;
+	/** Frame identifier */
+	uint16_t id;
+	/** Flags */
+	uint8_t flags;
+	/** Control */
+	uint8_t control;
+	/** VLAN */
+	uint16_t vlan;
+	/** Reserved */
+	uint16_t reserved_a;
+	/** Data buffer */
+	union icplus_fragment data;
+	/** Reserved */
+	uint8_t reserved_b[8];
+};
+
+/** Transmit alignment disabled */
+#define ICP_TX_UNALIGN 0x01
+
+/** Request transmit completion */
+#define ICP_TX_INDICATE 0x40
+
+/** Sole transmit fragment */
+#define ICP_TX_SOLE_FRAG 0x01
+
+/** Transmit data complete */
+#define ICP_TX_DONE 0x80
+
+/** Receive descriptor */
+struct icplus_rx_descriptor {
+	/** Address of next descriptor */
+	uint64_t next;
+	/** Recieved length */
+	uint16_t len;
+	/** Flags */
+	uint8_t flags;
+	/** Control */
+	uint8_t control;
+	/** VLAN */
+	uint16_t vlan;
+	/** Reserved */
+	uint16_t reserved_a;
+	/** Data buffer */
+	union icplus_fragment data;
+	/** Reserved */
+	uint8_t reserved_b[8];
+};
+
+/** Recieve frame overrun error */
+#define ICP_RX_ERR_OVERRUN 0x01
+
+/** Receive runt frame error */
+#define ICP_RX_ERR_RUNT 0x02
+
+/** Receive alignment error */
+#define ICP_RX_ERR_ALIGN 0x04
+
+/** Receive FCS error */
+#define ICP_RX_ERR_FCS 0x08
+
+/** Receive oversized frame error */
+#define ICP_RX_ERR_OVERSIZED 0x10
+
+/** Recieve length error */
+#define ICP_RX_ERR_LEN 0x20
+
+/** Receive frame descriptor done */
+#define ICP_RX_DONE 0x80
+
+/** Transmit descriptor ring */
+struct icplus_tx_ring {
+	/** Producer counter */
+	unsigned int producer;
+	/** Consumer counter */
+	unsigned int consumer;
+	/** Ring entries */
+	struct icplus_tx_descriptor *entry;
+};
+
+/** Number of transmit descriptors */
+#define ICP_TX_NUM 4
+
 /** An IC+ network card */
 struct icplus_nic {
 	/** Registers */
 	void *regs;
 	/** EEPROM */
 	struct nvs_device eeprom;
+	/** Transmit descriptor ring */
+	struct icplus_tx_ring tx;
 };
 
 #endif /* _ICPLUS_H */
