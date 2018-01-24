@@ -17,6 +17,12 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 /** Alignment requirement */
 #define ICP_ALIGN 0x8
 
+/** Base address low register offset */
+#define ICP_BASE_LO 0x0
+
+/** Base address high register offset */
+#define ICP_BASE_HI 0x4
+
 /** ASIC control register (double word) */
 #define ICP_ASICCTRL 0x30
 #define ICP_ASICCTRL_GLOBALRESET	0x00010000UL	/**< Global Reset */
@@ -47,6 +53,9 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 /** EEPROM data register (word) */
 #define ICP_EEPROMDATA 0x48
+
+/** List pointer transmit register */
+#define ICP_TFDLISTPTR 0x10
 
 /** Data fragment */
 union icplus_fragment {
@@ -137,9 +146,9 @@ struct icplus_rx_descriptor {
 /** Transmit descriptor ring */
 struct icplus_tx_ring {
 	/** Producer counter */
-	unsigned int producer;
+	unsigned int prod;
 	/** Consumer counter */
-	unsigned int consumer;
+	unsigned int cons;
 	/** Ring entries */
 	struct icplus_tx_descriptor *entry;
 };

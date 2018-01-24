@@ -188,9 +188,59 @@ static void icplus_check_link ( struct net_device *netdev ) {
 
 /******************************************************************************
  *
+ * Admin queue
+ *
+ ******************************************************************************
+ */
+
+/**
+ * Set descriptor ring base address
+ *
+ * @v icp		IC+ device
+ * @v offset		Register offset
+ * @v address		Base address
+ */
+static inline void icplus_set_base ( struct icplus_nic *icp, unsigned int offset,
+				     void *base ) {
+	physaddr_t phys = virt_to_bus ( base );
+
+	/* Program base address registers */
+	writel ( ( phys & 0xffffffffUL ),
+		 ( icp->regs + offset + ICP_BASE_LO ) );
+	if ( sizeof ( phys ) > sizeof ( uint32_t ) ) {
+		writel ( ( ( ( uint64_t ) phys ) >> 32 ),
+			 ( icp->regs + offset + ICP_BASE_HI ) );
+	} else {
+		writel ( 0, ( icp->regs + offset + ICP_BASE_HI ) );
+	}
+}
+
+/**
+ * Reset descriptor ring base address
+ *
+ * @v icp		IC+ device
+ * @v offset		Register offset
+ */
+static inline void icplus_clear_base ( struct icplus_nic *icp,
+				       unsigned int offset ) {
+
+	/* Clear base address registers */
+	writel ( 0, ( icp->regs + offset + ICP_BASE_HI ) );
+	writel ( 0, ( icp->regs + offset + ICP_BASE_LO ) );
+}
+
+/******************************************************************************
+ *
  * Network device interface
  *
  ******************************************************************************
+ */
+
+/**
+ * Create transmit descriptor ring
+ *
+ * @v icp		IC+ device
+ * @ret rc		Return status code
  */
 static int icplus_create_tx ( struct icplus_nic *icp ) {
 	size_t len = ( sizeof ( icp->tx.entry[0] ) * ICP_TX_NUM );
@@ -216,18 +266,32 @@ static int icplus_create_tx ( struct icplus_nic *icp ) {
 		txd->control = ( ICP_TX_SOLE_FRAG | ICP_TX_DONE );
 	}
 
+	/* Program descriptor base address */
+	icplus_set_base ( icp, ICP_TFDLISTPTR, icp->tx.entry );
+
+	/* Reset transmit producer & consumer counters */
+	icp->tx.prod = 0;
+	icp->tx.cons = 0;
+
 	return 0;
 
+	icplus_clear_base ( icp, ICP_TFDLISTPTR );
 	free_dma ( icp->tx.entry, len );
 	icp->tx.entry = NULL;
  err_alloc:
 	return rc;
 }
 
+/**
+ * Destroy transmit descriptor ring
+ *
+ * @v icp		IC+ device
+ */
 static void icplus_destroy_tx ( struct icplus_nic *icp ) {
 	size_t len = ( sizeof ( icp->tx.entry[0] ) * ICP_TX_NUM );
 
 	/* Free descriptor ring */
+	icplus_clear_base ( icp, ICP_TFDLISTPTR );
 	free_dma ( icp->tx.entry, len );
 	icp->tx.entry = NULL;
 }
@@ -240,9 +304,17 @@ static void icplus_destroy_tx ( struct icplus_nic *icp ) {
  */
 static int icplus_open ( struct net_device *netdev ) {
 	struct icplus_nic *icp = netdev->priv;
+	int rc;
 
-	DBGC ( icp, "ICPLUS %p does support open\n", icp );
+	/* Create transmit descriptor ring */
+	if ( ( rc = icplus_create_tx ( icp ) ) != 0 )
+		goto err_create_tx;
+
 	return 0;
+
+	icplus_destroy_tx ( icp );
+ err_create_tx:
+	return rc;
 }
 
 /**
@@ -253,7 +325,8 @@ static int icplus_open ( struct net_device *netdev ) {
 static void icplus_close ( struct net_device *netdev ) {
 	struct icplus_nic *icp = netdev->priv;
 
-	DBGC ( icp, "ICPLUS %p does not yet support close\n", icp );
+	/* Destroy transmit descriptor ring */
+	icplus_destroy_tx ( icp );
 }
 
 /**
