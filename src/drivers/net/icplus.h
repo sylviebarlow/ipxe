@@ -31,6 +31,10 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 /** Maximum time to wait for reset */
 #define ICP_RESET_MAX_WAIT_MS 1000
 
+/** DMA control register (word/double word) */
+#define ICP_DMACTRL 0x00
+#define ICP_DMACTRL_TXPOLLNOW 0x1000
+
 /** EEPROM control register (word) */
 #define ICP_EEPROMCTRL 0x4a
 #define ICP_EEPROMCTRL_ADDRESS( x )	( (x) << 0 )	/**< Address */
@@ -53,6 +57,14 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 /** EEPROM data register (word) */
 #define ICP_EEPROMDATA 0x48
+
+/** Interupt status register (word) */
+#define ICP_INTSTATUS 0x5e
+#define ICP_INTSTATUS_LINKEVENT		0x0100		/**< Link event */
+
+/** PHY control register (byte) */
+#define ICP_PHYCTRL 0x76
+#define ICP_PHYCTRL_LINKSPEED		0xc0		/**< Link speed */
 
 /** List pointer transmit register */
 #define ICP_TFDLISTPTR 0x10

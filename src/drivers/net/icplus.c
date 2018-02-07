@@ -181,9 +181,18 @@ static void icplus_init_eeprom ( struct icplus_nic *icp ) {
  */
 static void icplus_check_link ( struct net_device *netdev ) {
 	struct icplus_nic *icp = netdev->priv;
+	uint8_t phyctrl;
 
-	DBGC ( icp, "ICPLUS %p does not yet support link state\n", icp );
-	netdev_link_err ( netdev, -ENOTSUP );
+	/* Read link status */
+	phyctrl = readb ( icp->regs + ICP_PHYCTRL );
+	DBGC ( icp, "ICP %p PHY control is %02x\n", icp, phyctrl );
+
+	/* Update network device */
+	if ( phyctrl & ICP_PHYCTRL_LINKSPEED ) {
+		netdev_link_up ( netdev );
+	} else {
+		netdev_link_down ( netdev );
+	}
 }
 
 /******************************************************************************
@@ -310,6 +319,9 @@ static int icplus_open ( struct net_device *netdev ) {
 	if ( ( rc = icplus_create_tx ( icp ) ) != 0 )
 		goto err_create_tx;
 
+	/* Check link state */
+	icplus_check_link ( netdev );
+	
 	return 0;
 
 	icplus_destroy_tx ( icp );
@@ -337,12 +349,29 @@ static void icplus_close ( struct net_device *netdev ) {
  * @ret rc		Return status code
  */
 static int icplus_transmit ( struct net_device *netdev,
-			       struct io_buffer *iobuf ) {
+			     struct io_buffer *iobuf ) {
 	struct icplus_nic *icp = netdev->priv;
+	struct icplus_tx_descriptor *txd;
 
-	DBGC ( icp, "ICPLUS %p does not yet support transmit\n", icp );
-	( void ) iobuf;
-	return -ENOTSUP;
+	/* Check if ring is full */
+	if ( ( icp->tx.prod - icp->tx.cons ) >= ICP_TX_NUM ) {
+		return -ENOBUFS;
+	}
+
+	/* Find TX descriptor entry to use */
+	txd = &icp->tx.entry[ icp->tx.prod++ % ICP_TX_NUM ];
+
+	/* Fill in TX descriptor */
+	txd->data.address = cpu_to_le64 ( virt_to_bus ( iobuf->data ) );
+	txd->data.len = cpu_to_le16 ( iob_len ( iobuf ) );
+	wmb();
+	txd->control = ICP_TX_SOLE_FRAG;
+	wmb();
+
+	/* Ring doorbell */
+	writew ( ICP_DMACTRL_TXPOLLNOW, icp->regs + ICP_DMACTRL );
+
+	return 0;
 }
 
 /**
@@ -352,9 +381,16 @@ static int icplus_transmit ( struct net_device *netdev,
  */
 static void icplus_poll ( struct net_device *netdev ) {
 	struct icplus_nic *icp = netdev->priv;
+	uint16_t intstatus;
 
-	/* Not yet implemented */
-	( void ) icp;
+	/* Check for interrupts */
+	intstatus = readw ( icp->regs + ICP_INTSTATUS );
+
+	/* Check link state, if applicable */
+	if ( intstatus & ICP_INTSTATUS_LINKEVENT ) {
+		writew ( ICP_INTSTATUS_LINKEVENT, icp->regs + ICP_INTSTATUS );
+		icplus_check_link ( netdev );
+	}
 }
 
 /**
