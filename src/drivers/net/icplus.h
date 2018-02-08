@@ -60,6 +60,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 /** Interupt status register (word) */
 #define ICP_INTSTATUS 0x5e
+#define ICP_INTSTATUS_TXCOMPLETE	0x0004		/**< TX complete*/
 #define ICP_INTSTATUS_LINKEVENT		0x0100		/**< Link event */
 
 /** PHY control register (byte) */
@@ -68,6 +69,10 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 /** List pointer transmit register */
 #define ICP_TFDLISTPTR 0x10
+
+/** Transmit status register */
+#define ICP_TXSTATUS 0x60
+#define ICP_TXSTATUS_ERROR		0x00000001     	/**< TX error */
 
 /** Data fragment */
 union icplus_fragment {

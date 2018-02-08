@@ -352,17 +352,22 @@ static int icplus_transmit ( struct net_device *netdev,
 			     struct io_buffer *iobuf ) {
 	struct icplus_nic *icp = netdev->priv;
 	struct icplus_tx_descriptor *txd;
+	unsigned int tx_idx;
+	physaddr_t address;
 
 	/* Check if ring is full */
 	if ( ( icp->tx.prod - icp->tx.cons ) >= ICP_TX_NUM ) {
+		DBGC ( icp, "ICP %p out of transmit descriptors\n", icp );
 		return -ENOBUFS;
 	}
 
 	/* Find TX descriptor entry to use */
-	txd = &icp->tx.entry[ icp->tx.prod++ % ICP_TX_NUM ];
+	tx_idx = ( icp->tx.prod++ % ICP_TX_NUM );
+	txd = &icp->tx.entry[tx_idx];
 
 	/* Fill in TX descriptor */
-	txd->data.address = cpu_to_le64 ( virt_to_bus ( iobuf->data ) );
+	address = virt_to_bus ( iobuf->data );
+	txd->data.address = cpu_to_le64 ( address );
 	txd->data.len = cpu_to_le16 ( iob_len ( iobuf ) );
 	wmb();
 	txd->control = ICP_TX_SOLE_FRAG;
@@ -371,7 +376,39 @@ static int icplus_transmit ( struct net_device *netdev,
 	/* Ring doorbell */
 	writew ( ICP_DMACTRL_TXPOLLNOW, icp->regs + ICP_DMACTRL );
 
+	DBGC2 ( icp, "ICP %p TX %d is [%llx,%llx)\n", icp, tx_idx,
+		( ( unsigned long long ) address ),
+		( ( unsigned long long ) address + iob_len ( iobuf ) ) );
+	DBGC2_HDA ( icp, virt_to_phys ( txd ), txd, sizeof ( *txd ) );
 	return 0;
+}
+
+/**
+ * Poll for completed packets
+ *
+ * @v netdev		Network device
+ */
+static void icplus_poll_tx ( struct net_device *netdev ) {
+	struct icplus_nic *icp = netdev->priv;
+	struct icplus_tx_descriptor *tx;
+	unsigned int tx_idx;
+
+	/* Check for completed packets */
+	while ( icp->tx.cons != icp->tx.prod ) {
+
+		/* Get next transmit descriptor */
+		tx_idx = ( icp->tx.cons % ICP_TX_NUM );
+		tx = &icp->tx.entry[tx_idx];
+
+		/* Stop if descriptor is still in use */
+		if ( ! ( tx->control & ICP_TX_DONE ) )
+			return;
+
+		/* Complete TX descriptor */
+		DBGC2 ( icp, "ICP %p TX %d complete\n", icp, tx_idx );
+		netdev_tx_complete_next ( netdev );
+		icp->tx.cons++;
+	}
 }
 
 /**
@@ -382,9 +419,18 @@ static int icplus_transmit ( struct net_device *netdev,
 static void icplus_poll ( struct net_device *netdev ) {
 	struct icplus_nic *icp = netdev->priv;
 	uint16_t intstatus;
+	uint32_t txstatus;
 
 	/* Check for interrupts */
 	intstatus = readw ( icp->regs + ICP_INTSTATUS );
+
+	/* Check if transmit complete bit set */
+	if ( intstatus & ICP_INTSTATUS_TXCOMPLETE ) {
+		txstatus = readl ( icp->regs + ICP_TXSTATUS );
+		if ( txstatus & ICP_TXSTATUS_ERROR )
+			DBGC ( icp, "ICP %p TX error: %08x\n", icp, txstatus );
+		icplus_poll_tx ( netdev );
+	}
 
 	/* Check link state, if applicable */
 	if ( intstatus & ICP_INTSTATUS_LINKEVENT ) {
