@@ -319,11 +319,17 @@ static int icplus_open ( struct net_device *netdev ) {
 	if ( ( rc = icplus_create_tx ( icp ) ) != 0 )
 		goto err_create_tx;
 
+	/* Enable transmitter and receiver */
+	writel ( ( ICP_MACCTRL_TXENABLE | ICP_MACCTRL_RXENABLE |
+		   ICP_MACCTRL_DUPLEX ), icp->regs + ICP_MACCTRL );
+
 	/* Check link state */
 	icplus_check_link ( netdev );
 	
 	return 0;
 
+	writel ( ( ICP_MACCTRL_TXDISABLE | ICP_MACCTRL_RXDISABLE ),
+		 icp->regs + ICP_MACCTRL );
 	icplus_destroy_tx ( icp );
  err_create_tx:
 	return rc;
@@ -336,6 +342,10 @@ static int icplus_open ( struct net_device *netdev ) {
  */
 static void icplus_close ( struct net_device *netdev ) {
 	struct icplus_nic *icp = netdev->priv;
+
+	/* Disable transmitter and receiver */
+	writel ( ( ICP_MACCTRL_TXDISABLE | ICP_MACCTRL_RXDISABLE ),
+		 icp->regs + ICP_MACCTRL );
 
 	/* Destroy transmit descriptor ring */
 	icplus_destroy_tx ( icp );

@@ -60,8 +60,16 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 /** Interupt status register (word) */
 #define ICP_INTSTATUS 0x5e
-#define ICP_INTSTATUS_TXCOMPLETE	0x0004		/**< TX complete*/
+#define ICP_INTSTATUS_TXCOMPLETE	0x0004		/**< TX complete */
 #define ICP_INTSTATUS_LINKEVENT		0x0100		/**< Link event */
+
+/** MAC control register (double word) */
+#define ICP_MACCTRL 0x6c
+#define ICP_MACCTRL_DUPLEX		0x00000020	/**< Duplex select */
+#define ICP_MACCTRL_TXENABLE		0x01000000	/**< TX enable */
+#define ICP_MACCTRL_TXDISABLE		0x02000000	/**< TX disable */
+#define ICP_MACCTRL_RXENABLE		0x08000000	/**< RX enable */
+#define ICP_MACCTRL_RXDISABLE		0x10000000	/**< RX disable */
 
 /** PHY control register (byte) */
 #define ICP_PHYCTRL 0x76
