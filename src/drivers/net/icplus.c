@@ -308,6 +308,56 @@ static void icplus_destroy_ring ( struct icplus_nic *icp, struct icplus_ring *ri
 }
 
 /**
+ * Refill receive descriptor ring
+ *
+ * @v icp		IC+ device
+ */
+void icplus_refill_rx ( struct icplus_nic *icp ) {
+	struct icplus_descriptor *desc;
+	struct io_buffer *iobuf;
+	unsigned int rx_idx;
+	physaddr_t address;
+	unsigned int refilled = 0;
+
+	/* Refill ring */
+	while ( ( icp->rx.prod - icp->rx.cons ) < ICP_NUM_DESC ) {
+
+		/* Allocate I/O buffer */
+		iobuf = alloc_iob ( ICP_RX_MAX_LEN );
+		if ( ! iobuf ) {
+			/* Wait for next refill */
+			break;
+		}
+
+		/* Get next receive descriptor */
+		rx_idx = ( icp->rx.prod++ % ICP_NUM_DESC );
+		desc = &icp->rx.entry[rx_idx];
+
+		/* Populate receive descriptor */
+		address = virt_to_bus ( iobuf->data );
+	        desc->data.address = cpu_to_le64 ( address );
+		desc->data.len = cpu_to_le16 ( ICP_RX_MAX_LEN );
+		wmb();
+		desc->control = 0;
+
+		/* Record I/O buffer */
+		assert ( icp->rx_iobuf[rx_idx] == NULL );
+		icp->rx_iobuf[rx_idx] = iobuf;
+
+		DBGC2 ( icp, "ICP %p RX %d is [%llx,%llx)\n", icp, rx_idx,
+			( ( unsigned long long ) address ),
+			( ( unsigned long long ) address + ICP_RX_MAX_LEN ) );
+		refilled++;
+	}
+
+	/* Push descriptors to card, if applicable */
+	if ( refilled ) {
+		wmb();
+		writew ( ICP_DMACTRL_RXPOLLNOW, icp->regs + ICP_DMACTRL );
+	}
+}
+
+/**
  * Open network device
  *
  * @v netdev		Network device
@@ -321,9 +371,21 @@ static int icplus_open ( struct net_device *netdev ) {
 	if ( ( rc = icplus_create_ring ( icp, &icp->tx ) ) != 0 )
 		goto err_create_tx;
 
+	/* Create receive descriptor ring */
+	if ( ( rc = icplus_create_ring ( icp, &icp->rx ) ) != 0 )
+		goto err_create_rx;
+
+	/* Enable receive mode */
+	writew ( ( ICP_RXMODE_UNICAST | ICP_RXMODE_MULTICAST |
+		   ICP_RXMODE_BROADCAST | ICP_RXMODE_ALLFRAMES ),
+		 icp->regs + ICP_RXMODE );
+
 	/* Enable transmitter and receiver */
 	writel ( ( ICP_MACCTRL_TXENABLE | ICP_MACCTRL_RXENABLE |
 		   ICP_MACCTRL_DUPLEX ), icp->regs + ICP_MACCTRL );
+
+	/* Fill receive ring */
+	icplus_refill_rx ( icp );
 
 	/* Check link state */
 	icplus_check_link ( netdev );
@@ -332,6 +394,8 @@ static int icplus_open ( struct net_device *netdev ) {
 
 	writel ( ( ICP_MACCTRL_TXDISABLE | ICP_MACCTRL_RXDISABLE ),
 		 icp->regs + ICP_MACCTRL );
+	icplus_destroy_ring ( icp, &icp->rx );
+ err_create_rx:
 	icplus_destroy_ring ( icp, &icp->tx );
  err_create_tx:
 	return rc;
@@ -344,13 +408,24 @@ static int icplus_open ( struct net_device *netdev ) {
  */
 static void icplus_close ( struct net_device *netdev ) {
 	struct icplus_nic *icp = netdev->priv;
+	unsigned int i;
 
 	/* Disable transmitter and receiver */
 	writel ( ( ICP_MACCTRL_TXDISABLE | ICP_MACCTRL_RXDISABLE ),
 		 icp->regs + ICP_MACCTRL );
 
+	/* Destroy receive descriptor ring */
+	icplus_destroy_ring ( icp, &icp->rx );
+
 	/* Destroy transmit descriptor ring */
 	icplus_destroy_ring ( icp, &icp->tx );
+
+	/* Discard any unused receive buffers */
+	for ( i = 0 ; i < ICP_NUM_DESC ; i++ ) {
+		if ( icp->rx_iobuf[i] )
+			free_iob ( icp->rx_iobuf[i] );
+		icp->rx_iobuf[i] = NULL;
+	}
 }
 
 /**
@@ -424,6 +499,50 @@ static void icplus_poll_tx ( struct net_device *netdev ) {
 }
 
 /**
+ * Poll for received packets
+ *
+ * @v netdev		Network device
+ */
+static void icplus_poll_rx ( struct net_device *netdev ) {
+	struct icplus_nic *icp = netdev->priv;
+	struct icplus_descriptor *desc;
+	struct io_buffer *iobuf;
+	unsigned int rx_idx;
+	size_t len;
+
+	/* Check for received packets */
+	while ( icp->rx.cons != icp->rx.prod ) {
+
+		/* Get next transmit descriptor */
+		rx_idx = ( icp->rx.cons % ICP_NUM_DESC );
+		desc = &icp->rx.entry[rx_idx];
+
+		/* Stop if descriptor is still in use */
+		if ( ! ( desc->control & ICP_DONE ) )
+			return;
+
+		/* Populate I/O buffer */
+		iobuf = icp->rx_iobuf[rx_idx];
+		icp->rx_iobuf[rx_idx] = NULL;
+		len = le16_to_cpu ( desc->len );
+		iob_put ( iobuf, len );
+
+		/* Hand off to network stack */
+		// fixme
+		if ( 0 ) {
+			DBGC ( icp, "ICP %p RX %d error (length %zd, "
+			       "flags %02x)\n", icp, rx_idx, len, desc->flags );
+			netdev_rx_err ( netdev, iobuf, -EIO );
+		} else {
+			DBGC2 ( icp, "ICP %p RX %d complete (length "
+				"%zd)\n", icp, rx_idx, len );
+			netdev_rx ( netdev, iobuf );
+		}
+		icp->rx.cons++;
+	}
+}
+
+/**
  * Poll for completed and received packets
  *
  * @v netdev		Network device
@@ -436,7 +555,7 @@ static void icplus_poll ( struct net_device *netdev ) {
 	/* Check for interrupts */
 	intstatus = readw ( icp->regs + ICP_INTSTATUS );
 
-	/* Check if transmit complete bit set */
+	/* Poll for TX completions, if applicable */
 	if ( intstatus & ICP_INTSTATUS_TXCOMPLETE ) {
 		txstatus = readl ( icp->regs + ICP_TXSTATUS );
 		if ( txstatus & ICP_TXSTATUS_ERROR )
@@ -444,11 +563,20 @@ static void icplus_poll ( struct net_device *netdev ) {
 		icplus_poll_tx ( netdev );
 	}
 
+	/* Poll for RX completions, if applicable */
+	if ( intstatus & ICP_INTSTATUS_RXDMACOMPLETE ) {
+		writew ( ICP_INTSTATUS_RXDMACOMPLETE, icp->regs + ICP_INTSTATUS );
+		icplus_poll_rx ( netdev );
+	}
+
 	/* Check link state, if applicable */
 	if ( intstatus & ICP_INTSTATUS_LINKEVENT ) {
 		writew ( ICP_INTSTATUS_LINKEVENT, icp->regs + ICP_INTSTATUS );
 		icplus_check_link ( netdev );
 	}
+
+	/* Refill receive ring */
+	icplus_refill_rx ( icp );
 }
 
 /**

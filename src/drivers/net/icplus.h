@@ -25,15 +25,16 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 /** ASIC control register (double word) */
 #define ICP_ASICCTRL 0x30
-#define ICP_ASICCTRL_GLOBALRESET	0x00010000UL	/**< Global Reset */
-#define ICP_ASICCTRL_RESETBUSY		0x04000000UL	/**< Reset Busy */
+#define ICP_ASICCTRL_GLOBALRESET	0x00010000UL	/**< Global reset */
+#define ICP_ASICCTRL_RESETBUSY		0x04000000UL	/**< Reset busy */
 
 /** Maximum time to wait for reset */
 #define ICP_RESET_MAX_WAIT_MS 1000
 
 /** DMA control register (word/double word) */
 #define ICP_DMACTRL 0x00
-#define ICP_DMACTRL_TXPOLLNOW 0x1000
+#define ICP_DMACTRL_RXPOLLNOW		0x0010		/**< Receive poll now */
+#define ICP_DMACTRL_TXPOLLNOW 		0x1000		/**< Transmit poll now */
 
 /** EEPROM control register (word) */
 #define ICP_EEPROMCTRL 0x4a
@@ -41,7 +42,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #define ICP_EEPROMCTRL_OPCODE( x )	( (x) << 8 )	/**< Opcode */
 #define ICP_EEPROMCTRL_OPCODE_READ \
 	ICP_EEPROMCTRL_OPCODE ( 2 )			/**< Read register */
-#define ICP_EEPROMCTRL_BUSY		0x8000		/**< EEPROM Busy */
+#define ICP_EEPROMCTRL_BUSY		0x8000		/**< EEPROM busy */
 
 /** Maximum time to wait for reading EEPROM */
 #define ICP_EEPROM_MAX_WAIT_MS 1000
@@ -62,18 +63,26 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #define ICP_INTSTATUS 0x5e
 #define ICP_INTSTATUS_TXCOMPLETE	0x0004		/**< TX complete */
 #define ICP_INTSTATUS_LINKEVENT		0x0100		/**< Link event */
+#define ICP_INTSTATUS_RXDMACOMPLETE	0x0400		/**< RX DMA complete */
 
 /** MAC control register (double word) */
 #define ICP_MACCTRL 0x6c
-#define ICP_MACCTRL_DUPLEX		0x00000020	/**< Duplex select */
-#define ICP_MACCTRL_TXENABLE		0x01000000	/**< TX enable */
-#define ICP_MACCTRL_TXDISABLE		0x02000000	/**< TX disable */
-#define ICP_MACCTRL_RXENABLE		0x08000000	/**< RX enable */
-#define ICP_MACCTRL_RXDISABLE		0x10000000	/**< RX disable */
+#define ICP_MACCTRL_DUPLEX		0x00000020UL	/**< Duplex select */
+#define ICP_MACCTRL_TXENABLE		0x01000000UL	/**< TX enable */
+#define ICP_MACCTRL_TXDISABLE		0x02000000UL	/**< TX disable */
+#define ICP_MACCTRL_RXENABLE		0x08000000UL	/**< RX enable */
+#define ICP_MACCTRL_RXDISABLE		0x10000000UL	/**< RX disable */
 
 /** PHY control register (byte) */
 #define ICP_PHYCTRL 0x76
 #define ICP_PHYCTRL_LINKSPEED		0xc0		/**< Link speed */
+
+/** Receive mode register (word) */
+#define ICP_RXMODE 0x88
+#define ICP_RXMODE_UNICAST		0x0001		/**< Receive unicast */
+#define ICP_RXMODE_MULTICAST		0x0002		/**< Receice multicast */
+#define ICP_RXMODE_BROADCAST		0x0004		/**< Receive broadcast */
+#define ICP_RXMODE_ALLFRAMES		0x0008		/**< Receive all frames */
 
 /** List pointer receive register */
 #define ICP_RFDLISTPTR 0x1c
@@ -83,7 +92,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 /** Transmit status register */
 #define ICP_TXSTATUS 0x60
-#define ICP_TXSTATUS_ERROR		0x00000001     	/**< TX error */
+#define ICP_TXSTATUS_ERROR		0x00000001UL	/**< TX error */
 
 /** Data fragment */
 union icplus_fragment {
@@ -163,6 +172,9 @@ struct icplus_ring {
 /** Number of descriptors */
 #define ICP_NUM_DESC 4
 
+/** Maximum receive packet length */
+#define ICP_RX_MAX_LEN ETH_FRAME_LEN
+
 /** An IC+ network card */
 struct icplus_nic {
 	/** Registers */
@@ -173,6 +185,8 @@ struct icplus_nic {
 	struct icplus_ring tx;
 	/** Receive descriptor ring */
 	struct icplus_ring rx;
+	/** Receive I/O buffers */
+	struct io_buffer *rx_iobuf[ICP_NUM_DESC];
 };
 
 #endif /* _ICPLUS_H */
