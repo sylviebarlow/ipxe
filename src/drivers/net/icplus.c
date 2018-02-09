@@ -246,63 +246,65 @@ static inline void icplus_clear_base ( struct icplus_nic *icp,
  */
 
 /**
- * Create transmit descriptor ring
+ * Create descriptor ring
  *
  * @v icp		IC+ device
+ * @v ring		Descriptor ring
  * @ret rc		Return status code
  */
-static int icplus_create_tx ( struct icplus_nic *icp ) {
-	size_t len = ( sizeof ( icp->tx.entry[0] ) * ICP_TX_NUM );
+static int icplus_create_ring ( struct icplus_nic *icp, struct icplus_ring *ring ) {
+	size_t len = ( sizeof ( ring->entry[0] ) * ICP_NUM_DESC );
 	int rc;
 	unsigned int i;
-	struct icplus_tx_descriptor *txd;
-	struct icplus_tx_descriptor *next;
+	struct icplus_descriptor *desc;
+	struct icplus_descriptor *next;
 
 	/* Allocate descriptor ring */
-	icp->tx.entry = malloc_dma ( len, ICP_ALIGN );
-	if ( ! icp->tx.entry ) {
+	ring->entry = malloc_dma ( len, ICP_ALIGN );
+	if ( ! ring->entry ) {
 		rc = -ENOMEM;
 		goto err_alloc;
 	}
 
 	/* Initialise descriptor ring */
-	memset ( icp->tx.entry, 0, len );
-	for ( i = 0 ; i < ICP_TX_NUM ; i++ ) {
-		txd = &icp->tx.entry[i];
-		next = &icp->tx.entry[ ( i + 1 ) % ICP_TX_NUM ];
-		txd->next = cpu_to_le64 ( virt_to_bus ( next ) );
-		txd->flags = ( ICP_TX_UNALIGN | ICP_TX_INDICATE );
-		txd->control = ( ICP_TX_SOLE_FRAG | ICP_TX_DONE );
+	memset ( ring->entry, 0, len );
+	for ( i = 0 ; i < ICP_NUM_DESC ; i++ ) {
+		desc = &ring->entry[i];
+		next = &ring->entry[ ( i + 1 ) % ICP_NUM_DESC ];
+		desc->next = cpu_to_le64 ( virt_to_bus ( next ) );
+		desc->flags = ( ICP_TX_UNALIGN | ICP_TX_INDICATE );
+		desc->control = ( ICP_TX_SOLE_FRAG | ICP_DONE );
 	}
 
 	/* Program descriptor base address */
-	icplus_set_base ( icp, ICP_TFDLISTPTR, icp->tx.entry );
+	icplus_set_base ( icp, ring->listptr, ring->entry );
 
 	/* Reset transmit producer & consumer counters */
-	icp->tx.prod = 0;
-	icp->tx.cons = 0;
+	ring->prod = 0;
+	ring->cons = 0;
 
 	return 0;
 
-	icplus_clear_base ( icp, ICP_TFDLISTPTR );
-	free_dma ( icp->tx.entry, len );
-	icp->tx.entry = NULL;
+	icplus_clear_base ( icp, ring->listptr );
+	free_dma ( ring->entry, len );
+	ring->entry = NULL;
  err_alloc:
 	return rc;
 }
 
 /**
- * Destroy transmit descriptor ring
+ * Destroy descriptor ring
  *
  * @v icp		IC+ device
+ * @v ring		Descriptor ring
  */
-static void icplus_destroy_tx ( struct icplus_nic *icp ) {
-	size_t len = ( sizeof ( icp->tx.entry[0] ) * ICP_TX_NUM );
+static void icplus_destroy_ring ( struct icplus_nic *icp, struct icplus_ring *ring ) {
+	size_t len = ( sizeof ( ring->entry[0] ) * ICP_NUM_DESC );
 
 	/* Free descriptor ring */
-	icplus_clear_base ( icp, ICP_TFDLISTPTR );
-	free_dma ( icp->tx.entry, len );
-	icp->tx.entry = NULL;
+	icplus_clear_base ( icp, ring->listptr );
+	free_dma ( ring->entry, len );
+	ring->entry = NULL;
 }
 
 /**
@@ -316,7 +318,7 @@ static int icplus_open ( struct net_device *netdev ) {
 	int rc;
 
 	/* Create transmit descriptor ring */
-	if ( ( rc = icplus_create_tx ( icp ) ) != 0 )
+	if ( ( rc = icplus_create_ring ( icp, &icp->tx ) ) != 0 )
 		goto err_create_tx;
 
 	/* Enable transmitter and receiver */
@@ -330,7 +332,7 @@ static int icplus_open ( struct net_device *netdev ) {
 
 	writel ( ( ICP_MACCTRL_TXDISABLE | ICP_MACCTRL_RXDISABLE ),
 		 icp->regs + ICP_MACCTRL );
-	icplus_destroy_tx ( icp );
+	icplus_destroy_ring ( icp, &icp->tx );
  err_create_tx:
 	return rc;
 }
@@ -348,7 +350,7 @@ static void icplus_close ( struct net_device *netdev ) {
 		 icp->regs + ICP_MACCTRL );
 
 	/* Destroy transmit descriptor ring */
-	icplus_destroy_tx ( icp );
+	icplus_destroy_ring ( icp, &icp->tx );
 }
 
 /**
@@ -361,26 +363,26 @@ static void icplus_close ( struct net_device *netdev ) {
 static int icplus_transmit ( struct net_device *netdev,
 			     struct io_buffer *iobuf ) {
 	struct icplus_nic *icp = netdev->priv;
-	struct icplus_tx_descriptor *txd;
+	struct icplus_descriptor *desc;
 	unsigned int tx_idx;
 	physaddr_t address;
 
 	/* Check if ring is full */
-	if ( ( icp->tx.prod - icp->tx.cons ) >= ICP_TX_NUM ) {
+	if ( ( icp->tx.prod - icp->tx.cons ) >= ICP_NUM_DESC ) {
 		DBGC ( icp, "ICP %p out of transmit descriptors\n", icp );
 		return -ENOBUFS;
 	}
 
 	/* Find TX descriptor entry to use */
-	tx_idx = ( icp->tx.prod++ % ICP_TX_NUM );
-	txd = &icp->tx.entry[tx_idx];
+	tx_idx = ( icp->tx.prod++ % ICP_NUM_DESC );
+	desc = &icp->tx.entry[tx_idx];
 
 	/* Fill in TX descriptor */
 	address = virt_to_bus ( iobuf->data );
-	txd->data.address = cpu_to_le64 ( address );
-	txd->data.len = cpu_to_le16 ( iob_len ( iobuf ) );
+	desc->data.address = cpu_to_le64 ( address );
+	desc->data.len = cpu_to_le16 ( iob_len ( iobuf ) );
 	wmb();
-	txd->control = ICP_TX_SOLE_FRAG;
+	desc->control = ICP_TX_SOLE_FRAG;
 	wmb();
 
 	/* Ring doorbell */
@@ -389,7 +391,7 @@ static int icplus_transmit ( struct net_device *netdev,
 	DBGC2 ( icp, "ICP %p TX %d is [%llx,%llx)\n", icp, tx_idx,
 		( ( unsigned long long ) address ),
 		( ( unsigned long long ) address + iob_len ( iobuf ) ) );
-	DBGC2_HDA ( icp, virt_to_phys ( txd ), txd, sizeof ( *txd ) );
+	DBGC2_HDA ( icp, virt_to_phys ( desc ), desc, sizeof ( *desc ) );
 	return 0;
 }
 
@@ -400,18 +402,18 @@ static int icplus_transmit ( struct net_device *netdev,
  */
 static void icplus_poll_tx ( struct net_device *netdev ) {
 	struct icplus_nic *icp = netdev->priv;
-	struct icplus_tx_descriptor *tx;
+	struct icplus_descriptor *desc;
 	unsigned int tx_idx;
 
 	/* Check for completed packets */
 	while ( icp->tx.cons != icp->tx.prod ) {
 
 		/* Get next transmit descriptor */
-		tx_idx = ( icp->tx.cons % ICP_TX_NUM );
-		tx = &icp->tx.entry[tx_idx];
+		tx_idx = ( icp->tx.cons % ICP_NUM_DESC );
+		desc = &icp->tx.entry[tx_idx];
 
 		/* Stop if descriptor is still in use */
-		if ( ! ( tx->control & ICP_TX_DONE ) )
+		if ( ! ( desc->control & ICP_DONE ) )
 			return;
 
 		/* Complete TX descriptor */
@@ -500,6 +502,8 @@ static int icplus_probe ( struct pci_device *pci ) {
 	pci_set_drvdata ( pci, netdev );
 	netdev->dev = &pci->dev;
 	memset ( icp, 0, sizeof ( *icp ) );
+	icp->tx.listptr = ICP_TFDLISTPTR;
+	icp->rx.listptr = ICP_RFDLISTPTR;
 
 	/* Fix up PCI device */
 	adjust_pci_device ( pci );

@@ -75,6 +75,9 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #define ICP_PHYCTRL 0x76
 #define ICP_PHYCTRL_LINKSPEED		0xc0		/**< Link speed */
 
+/** List pointer receive register */
+#define ICP_RFDLISTPTR 0x1c
+
 /** List pointer transmit register */
 #define ICP_TFDLISTPTR 0x10
 
@@ -95,43 +98,11 @@ union icplus_fragment {
 	};
 };
 
-/** Transmit descriptor */
-struct icplus_tx_descriptor {
+/** Transmit or receive descriptor */
+struct icplus_descriptor {
 	/** Address of next descriptor */
 	uint64_t next;
-	/** Frame identifier */
-	uint16_t id;
-	/** Flags */
-	uint8_t flags;
-	/** Control */
-	uint8_t control;
-	/** VLAN */
-	uint16_t vlan;
-	/** Reserved */
-	uint16_t reserved_a;
-	/** Data buffer */
-	union icplus_fragment data;
-	/** Reserved */
-	uint8_t reserved_b[8];
-};
-
-/** Transmit alignment disabled */
-#define ICP_TX_UNALIGN 0x01
-
-/** Request transmit completion */
-#define ICP_TX_INDICATE 0x40
-
-/** Sole transmit fragment */
-#define ICP_TX_SOLE_FRAG 0x01
-
-/** Transmit data complete */
-#define ICP_TX_DONE 0x80
-
-/** Receive descriptor */
-struct icplus_rx_descriptor {
-	/** Address of next descriptor */
-	uint64_t next;
-	/** Recieved length */
+	/** Actual length */
 	uint16_t len;
 	/** Flags */
 	uint8_t flags;
@@ -146,6 +117,18 @@ struct icplus_rx_descriptor {
 	/** Reserved */
 	uint8_t reserved_b[8];
 };
+
+/** Descriptor complete */
+#define ICP_DONE 0x80
+
+/** Transmit alignment disabled */
+#define ICP_TX_UNALIGN 0x01
+
+/** Request transmit completion */
+#define ICP_TX_INDICATE 0x40
+
+/** Sole transmit fragment */
+#define ICP_TX_SOLE_FRAG 0x01
 
 /** Recieve frame overrun error */
 #define ICP_RX_ERR_OVERRUN 0x01
@@ -165,21 +148,20 @@ struct icplus_rx_descriptor {
 /** Recieve length error */
 #define ICP_RX_ERR_LEN 0x20
 
-/** Receive frame descriptor done */
-#define ICP_RX_DONE 0x80
-
-/** Transmit descriptor ring */
-struct icplus_tx_ring {
+/** Descriptor ring */
+struct icplus_ring {
 	/** Producer counter */
 	unsigned int prod;
 	/** Consumer counter */
 	unsigned int cons;
 	/** Ring entries */
-	struct icplus_tx_descriptor *entry;
+	struct icplus_descriptor *entry;
+	/* List pointer register */
+	unsigned int listptr;
 };
 
-/** Number of transmit descriptors */
-#define ICP_TX_NUM 4
+/** Number of descriptors */
+#define ICP_NUM_DESC 4
 
 /** An IC+ network card */
 struct icplus_nic {
@@ -188,7 +170,9 @@ struct icplus_nic {
 	/** EEPROM */
 	struct nvs_device eeprom;
 	/** Transmit descriptor ring */
-	struct icplus_tx_ring tx;
+	struct icplus_ring tx;
+	/** Receive descriptor ring */
+	struct icplus_ring rx;
 };
 
 #endif /* _ICPLUS_H */
