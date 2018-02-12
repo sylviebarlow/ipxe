@@ -26,6 +26,11 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 /** ASIC control register (double word) */
 #define ICP_ASICCTRL 0x30
 #define ICP_ASICCTRL_GLOBALRESET	0x00010000UL	/**< Global reset */
+#define ICP_ASICCTRL_DMA		0x00080000UL	/**< DMA */
+#define ICP_ASICCTRL_FIFO		0x00100000UL	/**< FIFO */
+#define ICP_ASICCTRL_NETWORK		0x00200000UL	/**< Network */
+#define ICP_ASICCTRL_HOST		0x00400000UL	/**< Host */
+#define ICP_ASICCTRL_AUTOINIT		0x00800000UL	/**< Auto init */
 #define ICP_ASICCTRL_RESETBUSY		0x04000000UL	/**< Reset busy */
 
 /** Maximum time to wait for reset */

@@ -60,7 +60,9 @@ static int icplus_reset ( struct icplus_nic *icp ) {
 	unsigned int i;
 
 	/* Trigger reset */
-	writel ( ICP_ASICCTRL_GLOBALRESET, ( icp->regs + ICP_ASICCTRL ) );
+	writel ( ( ICP_ASICCTRL_GLOBALRESET | ICP_ASICCTRL_DMA |
+		   ICP_ASICCTRL_FIFO | ICP_ASICCTRL_NETWORK | ICP_ASICCTRL_HOST |
+		   ICP_ASICCTRL_AUTOINIT ), ( icp->regs + ICP_ASICCTRL ) );
 
 	/* Wait for reset to complete */
 	for ( i = 0 ; i < ICP_RESET_MAX_WAIT_MS ; i++ ) {
@@ -224,20 +226,6 @@ static inline void icplus_set_base ( struct icplus_nic *icp, unsigned int offset
 	}
 }
 
-/**
- * Reset descriptor ring base address
- *
- * @v icp		IC+ device
- * @v offset		Register offset
- */
-static inline void icplus_clear_base ( struct icplus_nic *icp,
-				       unsigned int offset ) {
-
-	/* Clear base address registers */
-	writel ( 0, ( icp->regs + offset + ICP_BASE_HI ) );
-	writel ( 0, ( icp->regs + offset + ICP_BASE_LO ) );
-}
-
 /******************************************************************************
  *
  * Network device interface
@@ -276,16 +264,16 @@ static int icplus_create_ring ( struct icplus_nic *icp, struct icplus_ring *ring
 		desc->control = ( ICP_TX_SOLE_FRAG | ICP_DONE );
 	}
 
-	/* Program descriptor base address */
-	icplus_set_base ( icp, ring->listptr, ring->entry );
-
 	/* Reset transmit producer & consumer counters */
 	ring->prod = 0;
 	ring->cons = 0;
 
+	DBGC ( icp, "ICP %p %s ring at [%#08lx,%#08lx)\n",
+	       icp, ( ( ring->listptr == ICP_TFDLISTPTR ) ? "TX" : "RX" ),
+	       virt_to_bus ( ring->entry ),
+	       ( virt_to_bus ( ring->entry ) + len ) );
 	return 0;
 
-	icplus_clear_base ( icp, ring->listptr );
 	free_dma ( ring->entry, len );
 	ring->entry = NULL;
  err_alloc:
@@ -298,11 +286,11 @@ static int icplus_create_ring ( struct icplus_nic *icp, struct icplus_ring *ring
  * @v icp		IC+ device
  * @v ring		Descriptor ring
  */
-static void icplus_destroy_ring ( struct icplus_nic *icp, struct icplus_ring *ring ) {
+static void icplus_destroy_ring ( struct icplus_nic *icp __unused,
+				  struct icplus_ring *ring ) {
 	size_t len = ( sizeof ( ring->entry[0] ) * ICP_NUM_DESC );
 
 	/* Free descriptor ring */
-	icplus_clear_base ( icp, ring->listptr );
 	free_dma ( ring->entry, len );
 	ring->entry = NULL;
 }
@@ -375,6 +363,10 @@ static int icplus_open ( struct net_device *netdev ) {
 	if ( ( rc = icplus_create_ring ( icp, &icp->rx ) ) != 0 )
 		goto err_create_rx;
 
+	/* Program descriptor base address */
+	icplus_set_base ( icp, icp->tx.listptr, icp->tx.entry );
+	icplus_set_base ( icp, icp->rx.listptr, icp->rx.entry );
+
 	/* Enable receive mode */
 	writew ( ( ICP_RXMODE_UNICAST | ICP_RXMODE_MULTICAST |
 		   ICP_RXMODE_BROADCAST | ICP_RXMODE_ALLFRAMES ),
@@ -392,8 +384,7 @@ static int icplus_open ( struct net_device *netdev ) {
 	
 	return 0;
 
-	writel ( ( ICP_MACCTRL_TXDISABLE | ICP_MACCTRL_RXDISABLE ),
-		 icp->regs + ICP_MACCTRL );
+	icplus_reset ( icp );
 	icplus_destroy_ring ( icp, &icp->rx );
  err_create_rx:
 	icplus_destroy_ring ( icp, &icp->tx );
@@ -410,9 +401,8 @@ static void icplus_close ( struct net_device *netdev ) {
 	struct icplus_nic *icp = netdev->priv;
 	unsigned int i;
 
-	/* Disable transmitter and receiver */
-	writel ( ( ICP_MACCTRL_TXDISABLE | ICP_MACCTRL_RXDISABLE ),
-		 icp->regs + ICP_MACCTRL );
+	/* Perform global reset */
+	icplus_reset ( icp );
 
 	/* Destroy receive descriptor ring */
 	icplus_destroy_ring ( icp, &icp->rx );
