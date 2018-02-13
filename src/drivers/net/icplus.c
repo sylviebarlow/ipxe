@@ -518,8 +518,9 @@ static void icplus_poll_rx ( struct net_device *netdev ) {
 		iob_put ( iobuf, len );
 
 		/* Hand off to network stack */
-		// fixme
-		if ( 0 ) {
+		if ( desc->flags & ( ICP_RX_ERR_OVERRUN | ICP_RX_ERR_RUNT |
+				     ICP_RX_ERR_ALIGN | ICP_RX_ERR_FCS |
+				     ICP_RX_ERR_OVERSIZED | ICP_RX_ERR_LEN ) ) {
 			DBGC ( icp, "ICP %p RX %d error (length %zd, "
 			       "flags %02x)\n", icp, rx_idx, len, desc->flags );
 			netdev_rx_err ( netdev, iobuf, -EIO );
