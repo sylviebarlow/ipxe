@@ -171,6 +171,70 @@ static void icplus_init_eeprom ( struct icplus_nic *icp ) {
 
 /******************************************************************************
  *
+ * MII interface
+ *
+ ******************************************************************************
+ */
+
+/** Pin mapping for MII bit-bashing interface */
+static const uint8_t icplus_mii_bits[] = {
+	[MII_BIT_MDC]	= ICP_PHYCTRL_MGMTCLK,
+	[MII_BIT_MDIO]	= ICP_PHYCTRL_MGMTDATA,
+	[MII_BIT_DRIVE]	= ICP_PHYCTRL_MGMTDIR,
+};
+
+/**
+ * Read input bit
+ *
+ * @v basher		Bit-bashing interface
+ * @v bit_id		Bit number
+ * @ret zero		Input is a logic 0
+ * @ret non-zero	Input is a logic 1
+ */
+static int icplus_mii_read_bit ( struct bit_basher *basher,
+				 unsigned int bit_id ) {
+	struct icplus_nic *icp = container_of ( basher, struct icplus_nic,
+						miibit.basher );
+	uint8_t mask = icplus_mii_bits[bit_id];
+	uint8_t reg;
+
+	DBG_DISABLE ( DBGLVL_IO );
+	reg = readb ( icp->regs + ICP_PHYCTRL );
+	DBG_ENABLE ( DBGLVL_IO );
+	return ( reg & mask );
+}
+
+/**
+ * Set/clear output bit
+ *
+ * @v basher		Bit-bashing interface
+ * @v bit_id		Bit number
+ * @v data		Value to write
+ */
+static void icplus_mii_write_bit ( struct bit_basher *basher,
+				   unsigned int bit_id, unsigned long data ) {
+	struct icplus_nic *icp = container_of ( basher, struct icplus_nic,
+						miibit.basher );
+	uint8_t mask = icplus_mii_bits[bit_id];
+	uint8_t reg;
+
+	DBG_DISABLE ( DBGLVL_IO );
+	reg = readb ( icp->regs + ICP_PHYCTRL );
+	reg &= ~mask;
+	reg |= ( data & mask );
+	writeb ( reg, icp->regs + ICP_PHYCTRL );
+	readb ( icp->regs + ICP_PHYCTRL ); /* Ensure write reaches chip */
+	DBG_ENABLE ( DBGLVL_IO );
+}
+
+/** MII bit-bashing interface */
+static struct bit_basher_operations icplus_basher_ops = {
+	.read = icplus_mii_read_bit,
+	.write = icplus_mii_write_bit,
+};
+
+/******************************************************************************
+ *
  * Link state
  *
  ******************************************************************************
@@ -199,7 +263,7 @@ static void icplus_check_link ( struct net_device *netdev ) {
 
 /******************************************************************************
  *
- * Admin queue
+ * Network device interface
  *
  ******************************************************************************
  */
@@ -225,13 +289,6 @@ static inline void icplus_set_base ( struct icplus_nic *icp, unsigned int offset
 		writel ( 0, ( icp->regs + offset + ICP_BASE_HI ) );
 	}
 }
-
-/******************************************************************************
- *
- * Network device interface
- *
- ******************************************************************************
- */
 
 /**
  * Create descriptor ring
@@ -381,7 +438,7 @@ static int icplus_open ( struct net_device *netdev ) {
 
 	/* Check link state */
 	icplus_check_link ( netdev );
-	
+
 	return 0;
 
 	icplus_reset ( icp );
@@ -621,6 +678,8 @@ static int icplus_probe ( struct pci_device *pci ) {
 	pci_set_drvdata ( pci, netdev );
 	netdev->dev = &pci->dev;
 	memset ( icp, 0, sizeof ( *icp ) );
+	icp->miibit.basher.op = &icplus_basher_ops;
+	init_mii_bit_basher ( &icp->miibit );
 	icp->tx.listptr = ICP_TFDLISTPTR;
 	icp->rx.listptr = ICP_RFDLISTPTR;
 
@@ -648,6 +707,15 @@ static int icplus_probe ( struct pci_device *pci ) {
 		       icp, strerror ( rc ) );
 		goto err_eeprom;
 	}
+
+	//
+	//	extern unsigned int phy_fucker;
+	//	for ( phy_fucker = 0 ; phy_fucker < 32 ; phy_fucker++ ) {
+	mii_dump ( &icp->miibit.mii );
+	mii_write ( &icp->miibit.mii, 0x9, 0x0200 );
+	mii_reset ( &icp->miibit.mii );
+	mii_dump ( &icp->miibit.mii );
+		//	}
 
 	/* Register network device */
 	if ( ( rc = register_netdev ( netdev ) ) != 0 )

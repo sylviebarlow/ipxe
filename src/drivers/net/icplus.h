@@ -8,6 +8,7 @@
  */
 
 #include <ipxe/nvs.h>
+#include <ipxe/mii_bit.h>
 
 FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
@@ -80,6 +81,9 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 /** PHY control register (byte) */
 #define ICP_PHYCTRL 0x76
+#define ICP_PHYCTRL_MGMTCLK		0x01		/**< Management clock */
+#define ICP_PHYCTRL_MGMTDATA		0x02		/**< Management data */
+#define ICP_PHYCTRL_MGMTDIR		0x04		/**< Management direction */
 #define ICP_PHYCTRL_LINKSPEED		0xc0		/**< Link speed */
 
 /** Receive mode register (word) */
@@ -186,6 +190,8 @@ struct icplus_nic {
 	void *regs;
 	/** EEPROM */
 	struct nvs_device eeprom;
+	/** MII bit bashing interface */
+	struct mii_bit_basher miibit;
 	/** Transmit descriptor ring */
 	struct icplus_ring tx;
 	/** Receive descriptor ring */
