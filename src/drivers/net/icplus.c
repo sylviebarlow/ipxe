@@ -680,6 +680,7 @@ static int icplus_probe ( struct pci_device *pci ) {
 	memset ( icp, 0, sizeof ( *icp ) );
 	icp->miibit.basher.op = &icplus_basher_ops;
 	init_mii_bit_basher ( &icp->miibit );
+	mii_init ( &icp->mii, &icp->miibit.mdio, 24 );
 	icp->tx.listptr = ICP_TFDLISTPTR;
 	icp->rx.listptr = ICP_RFDLISTPTR;
 
@@ -711,10 +712,10 @@ static int icplus_probe ( struct pci_device *pci ) {
 	//
 	//	extern unsigned int phy_fucker;
 	//	for ( phy_fucker = 0 ; phy_fucker < 32 ; phy_fucker++ ) {
-	mii_dump ( &icp->miibit.mii );
-	mii_write ( &icp->miibit.mii, 0x9, 0x0200 );
-	mii_reset ( &icp->miibit.mii );
-	mii_dump ( &icp->miibit.mii );
+	mii_dump ( &icp->mii );
+	mii_write ( &icp->mii, 0x9, 0x0200 );
+	mii_reset ( &icp->mii );
+	mii_dump ( &icp->mii );
 		//	}
 
 	/* Register network device */

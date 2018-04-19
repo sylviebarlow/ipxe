@@ -192,6 +192,8 @@ struct icplus_nic {
 	struct nvs_device eeprom;
 	/** MII bit bashing interface */
 	struct mii_bit_basher miibit;
+	/** MII device */
+	struct mii_device mii;
 	/** Transmit descriptor ring */
 	struct icplus_ring tx;
 	/** Receive descriptor ring */

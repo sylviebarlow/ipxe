@@ -28,9 +28,6 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #include <ipxe/bitbash.h>
 #include <ipxe/mii_bit.h>
 
-// hack
-unsigned int phy_fucker = 24;
-
 static uint32_t mii_bit_xfer ( struct bit_basher *basher,
 			       uint32_t mask, uint32_t write ) {
 	uint32_t read = 0;
@@ -95,21 +92,22 @@ static unsigned int mii_bit_rw ( struct bit_basher *basher,
 	return data;
 }
 
-static int mii_bit_read ( struct mii_interface *mii, unsigned int reg ) {
+static int mii_bit_read ( struct mii_interface *mdio, unsigned int phy,
+			  unsigned int reg ) {
 	struct mii_bit_basher *miibit =
-		container_of ( mii, struct mii_bit_basher, mii );
+		container_of ( mdio, struct mii_bit_basher, mdio );
 	struct bit_basher *basher = &miibit->basher;
 
-	return mii_bit_rw ( basher, phy_fucker, reg, 0, MII_BIT_CMD_READ );
+	return mii_bit_rw ( basher, phy, reg, 0, MII_BIT_CMD_READ );
 }
 
-static int mii_bit_write ( struct mii_interface *mii, unsigned int reg,
-			   unsigned int data ) {
+static int mii_bit_write ( struct mii_interface *mdio, unsigned int phy,
+			   unsigned int reg, unsigned int data ) {
 	struct mii_bit_basher *miibit =
-		container_of ( mii, struct mii_bit_basher, mii );
+		container_of ( mdio, struct mii_bit_basher, mdio );
 	struct bit_basher *basher = &miibit->basher;
 
-	mii_bit_rw ( basher, phy_fucker, reg, data, MII_BIT_CMD_WRITE );
+	mii_bit_rw ( basher, phy, reg, data, MII_BIT_CMD_WRITE );
 	return 0;
 }
 
@@ -119,5 +117,5 @@ static struct mii_operations mii_bit_op = {
 };
 
 void init_mii_bit_basher ( struct mii_bit_basher *miibit ) {
-	mii_init ( &miibit->mii, &mii_bit_op );
+	mdio_init ( &miibit->mdio, &mii_bit_op );
 };

@@ -32,7 +32,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 /** A bit-bashing MII interface */
 struct mii_bit_basher {
 	/** MII interface */
-	struct mii_interface mii;
+	struct mii_interface mdio;
 	/** Bit-bashing interface */
 	struct bit_basher basher;
 };
