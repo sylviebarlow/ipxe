@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 Michael Brown <mbrown@fensystems.co.uk>.
+ * Copyright (C) 2018 Michael Brown <mbrown@fensystems.co.uk>.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -25,50 +25,36 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 /** @file
  *
- * Standard PC-BIOS reboot mechanism
+ * NetBIOS user names
  *
  */
 
-#include <ipxe/reboot.h>
-#include <realmode.h>
-#include <bios.h>
-#include <ipxe/apm.h>
-#include <ipxe/acpipwr.h>
+#include <stddef.h>
+#include <string.h>
+#include <ipxe/netbios.h>
 
 /**
- * Reboot system
+ * Split NetBIOS [domain\]username into separate domain and username fields
  *
- * @v warm		Perform a warm reboot
- */
-static void bios_reboot ( int warm ) {
-	uint16_t flag;
-
-	/* Configure BIOS for cold/warm reboot */
-	flag = ( warm ? BDA_REBOOT_WARM : 0 );
-	put_real ( flag, BDA_SEG, BDA_REBOOT );
-
-	/* Jump to system reset vector */
-	__asm__ __volatile__ ( REAL_CODE ( "ljmp $0xf000, $0xfff0" ) : );
-}
-
-/**
- * Power off system
+ * @v username		NetBIOS [domain\]username string
+ * @ret domain		Domain portion of string, or NULL if no domain present
  *
- * @ret rc		Return status code
+ * This function modifies the original string by removing the
+ * separator.  The caller may restore the string using
+ * netbios_domain_undo().
  */
-static int bios_poweroff ( void ) {
-	int rc;
+const char * netbios_domain ( char **username ) {
+	char *domain_username = *username;
+	char *sep;
 
-	/* Try APM */
-	if ( ( rc = apm_poweroff() ) != 0 )
-		DBG ( "APM power off failed: %s\n", strerror ( rc ) );
+	/* Find separator, if present */
+	sep = strchr ( domain_username, '\\' );
+	if ( ! sep )
+		return NULL;
 
-	/* Try ACPI */
-	if ( ( rc = acpi_poweroff() ) != 0 )
-		DBG ( "ACPI power off failed: %s\n", strerror ( rc ) );
+	/* Overwrite separator with NUL terminator and update username string */
+	*sep = '\0';
+	*username = ( sep + 1 );
 
-	return rc;
+	return domain_username;
 }
-
-PROVIDE_REBOOT ( pcbios, reboot, bios_reboot );
-PROVIDE_REBOOT ( pcbios, poweroff, bios_poweroff );
