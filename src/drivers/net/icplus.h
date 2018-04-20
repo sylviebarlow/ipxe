@@ -26,6 +26,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
 /** ASIC control register (double word) */
 #define ICP_ASICCTRL 0x30
+#define ICP_ASICCTRL_PHYSPEED1000	0x00000040UL	/**< PHY speed 1000 */
 #define ICP_ASICCTRL_GLOBALRESET	0x00010000UL	/**< Global reset */
 #define ICP_ASICCTRL_DMA		0x00080000UL	/**< DMA */
 #define ICP_ASICCTRL_FIFO		0x00100000UL	/**< FIFO */

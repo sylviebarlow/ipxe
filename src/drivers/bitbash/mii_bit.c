@@ -28,6 +28,14 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #include <ipxe/bitbash.h>
 #include <ipxe/mii_bit.h>
 
+/**
+ * Transfer bits over MII bit-bashing interface
+ *
+ * @v basher		Bit basher
+ * @v mask		Mask
+ * @v write		Data to write
+ * @ret read		Data read
+ */
 static uint32_t mii_bit_xfer ( struct bit_basher *basher,
 			       uint32_t mask, uint32_t write ) {
 	uint32_t read = 0;
@@ -58,6 +66,16 @@ static uint32_t mii_bit_xfer ( struct bit_basher *basher,
 	return read;
 }
 
+/**
+ * Read or write via MII bit-bashing interface
+ *
+ * @v basher		Bit basher
+ * @v phy		PHY address
+ * @v reg		Register address
+ * @v data		Data to write
+ * @v cmd		Command
+ * @ret data		Data read
+ */
 static unsigned int mii_bit_rw ( struct bit_basher *basher,
 				 unsigned int phy, unsigned int reg,
 				 unsigned int data, unsigned int cmd ) {
@@ -92,6 +110,14 @@ static unsigned int mii_bit_rw ( struct bit_basher *basher,
 	return data;
 }
 
+/**
+ * Read from MII register
+ *
+ * @v mdio		MII interface
+ * @v phy		PHY address
+ * @v reg		Register address
+ * @ret data		Data read, or negative error
+ */
 static int mii_bit_read ( struct mii_interface *mdio, unsigned int phy,
 			  unsigned int reg ) {
 	struct mii_bit_basher *miibit =
@@ -101,6 +127,15 @@ static int mii_bit_read ( struct mii_interface *mdio, unsigned int phy,
 	return mii_bit_rw ( basher, phy, reg, 0, MII_BIT_CMD_READ );
 }
 
+/**
+ * Write to MII register
+ *
+ * @v mdio		MII interface
+ * @v phy		PHY address
+ * @v reg		Register address
+ * @v data		Data to write
+ * @ret rc		Return status code
+ */
 static int mii_bit_write ( struct mii_interface *mdio, unsigned int phy,
 			   unsigned int reg, unsigned int data ) {
 	struct mii_bit_basher *miibit =

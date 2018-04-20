@@ -241,6 +241,44 @@ static struct bit_basher_operations icplus_basher_ops = {
  */
 
 /**
+ * Configure PHY
+ *
+ * @v icp		IC+ device
+ * @ret rc		Return status code
+ */
+static int icplus_init_phy ( struct icplus_nic *icp ) {
+	uint32_t asicctrl;
+	int rc;
+
+	/* Find PHY address */ 
+	if ( ( rc = mii_find ( &icp->mii ) ) != 0 ) {
+		DBGC ( icp, "ICPLUS %p could not find PHY address: %s\n",
+		       icp, strerror ( rc ) );
+		return rc;
+	}
+	
+	/* Configure PHY to advertise 1000Mbps if applicable */ 
+	asicctrl = readl ( icp->regs + ICP_ASICCTRL );
+	if ( asicctrl & ICP_ASICCTRL_PHYSPEED1000 ) {
+		if ( ( rc = mii_write ( &icp->mii, MII_CTRL1000,
+					ADVERTISE_1000FULL ) ) != 0 ) {
+			DBGC ( icp, "ICPLUS %p could not advertise 1000Mbps: "
+			       "%s\n", icp, strerror ( rc ) );
+			return rc;
+		}
+	}
+
+	/* Reset PHY */
+	if ( ( rc = mii_reset ( &icp->mii ) ) != 0 ) {
+		DBGC ( icp, "ICPLUS %p could not reset PHY: %s\n",
+		       icp, strerror ( rc ) );
+		return rc;
+	}
+
+	return 0;
+}
+
+/**
  * Check link state
  *
  * @v netdev		Network device
@@ -251,7 +289,7 @@ static void icplus_check_link ( struct net_device *netdev ) {
 
 	/* Read link status */
 	phyctrl = readb ( icp->regs + ICP_PHYCTRL );
-	DBGC ( icp, "ICP %p PHY control is %02x\n", icp, phyctrl );
+	DBGC ( icp, "ICPLUS %p PHY control is %02x\n", icp, phyctrl );
 
 	/* Update network device */
 	if ( phyctrl & ICP_PHYCTRL_LINKSPEED ) {
@@ -680,7 +718,7 @@ static int icplus_probe ( struct pci_device *pci ) {
 	memset ( icp, 0, sizeof ( *icp ) );
 	icp->miibit.basher.op = &icplus_basher_ops;
 	init_mii_bit_basher ( &icp->miibit );
-	mii_init ( &icp->mii, &icp->miibit.mdio, 24 );
+	mii_init ( &icp->mii, &icp->miibit.mdio, 0 );
 	icp->tx.listptr = ICP_TFDLISTPTR;
 	icp->rx.listptr = ICP_RFDLISTPTR;
 
@@ -709,14 +747,9 @@ static int icplus_probe ( struct pci_device *pci ) {
 		goto err_eeprom;
 	}
 
-	//
-	//	extern unsigned int phy_fucker;
-	//	for ( phy_fucker = 0 ; phy_fucker < 32 ; phy_fucker++ ) {
-	mii_dump ( &icp->mii );
-	mii_write ( &icp->mii, 0x9, 0x0200 );
-	mii_reset ( &icp->mii );
-	mii_dump ( &icp->mii );
-		//	}
+	/* Configure PHY */
+	if ( ( rc = icplus_init_phy ( icp ) ) != 0 )
+		goto err_phy;
 
 	/* Register network device */
 	if ( ( rc = register_netdev ( netdev ) ) != 0 )
@@ -729,6 +762,7 @@ static int icplus_probe ( struct pci_device *pci ) {
 
 	unregister_netdev ( netdev );
  err_register_netdev:
+ err_phy:
  err_eeprom:
 	icplus_reset ( icp );
  err_reset:
