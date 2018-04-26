@@ -163,8 +163,8 @@ int mii_find ( struct mii_device *mii ) {
 		mii->address = address;
 		id = mii_read ( mii, MII_PHYSID1 );
 		if ( ( id > 0x0000 ) && ( id < 0xffff ) ) {
-			DBGC ( mii, "MII %p found PHY at address %d\n",
-			       mii, address );
+			DBGC ( mii, "MII %p found PHY at address %d (id "
+			       "%#04x)\n", mii, address, id );
 			return 0;
 		}
 	}

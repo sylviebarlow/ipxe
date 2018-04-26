@@ -113,20 +113,21 @@ static int icplus_read_eeprom ( struct nvs_device *nvs, unsigned int address,
 	/* Initiate read */
 	writew ( ( ICP_EEPROMCTRL_OPCODE_READ |
 		   ICP_EEPROMCTRL_ADDRESS ( address ) ),
-		 ( icp->regs + ICP_EEPROMCTRL ) );
+		 ( icp->regs + icp->eepromctrl ) );
 
 	/* Wait for read to complete */
 	for ( i = 0 ; i < ICP_EEPROM_MAX_WAIT_MS ; i++ ) {
 
 		/* If read is not complete, delay 1ms and retry */
-		eepromctrl = readw ( icp->regs + ICP_EEPROMCTRL );
+		eepromctrl = readw ( icp->regs + icp->eepromctrl );
 		if ( eepromctrl & ICP_EEPROMCTRL_BUSY ) {
 			mdelay ( 1 );
 			continue;
 		}
 
 		/* Extract data */
-		*data_word = cpu_to_le16 ( readw ( icp->regs + ICP_EEPROMDATA ));
+		*data_word = cpu_to_le16 ( readw ( icp->regs +
+						   icp->eepromdata ) );
 		return 0;
 	}
 
@@ -199,7 +200,7 @@ static int icplus_mii_read_bit ( struct bit_basher *basher,
 	uint8_t reg;
 
 	DBG_DISABLE ( DBGLVL_IO );
-	reg = readb ( icp->regs + ICP_PHYCTRL );
+	reg = readb ( icp->regs + icp->phyctrl );
 	DBG_ENABLE ( DBGLVL_IO );
 	return ( reg & mask );
 }
@@ -219,11 +220,11 @@ static void icplus_mii_write_bit ( struct bit_basher *basher,
 	uint8_t reg;
 
 	DBG_DISABLE ( DBGLVL_IO );
-	reg = readb ( icp->regs + ICP_PHYCTRL );
+	reg = readb ( icp->regs + icp->phyctrl );
 	reg &= ~mask;
 	reg |= ( data & mask );
-	writeb ( reg, icp->regs + ICP_PHYCTRL );
-	readb ( icp->regs + ICP_PHYCTRL ); /* Ensure write reaches chip */
+	writeb ( reg, icp->regs + icp->phyctrl );
+	readb ( icp->regs + icp->phyctrl ); /* Ensure write reaches chip */
 	DBG_ENABLE ( DBGLVL_IO );
 }
 
@@ -257,7 +258,11 @@ static int icplus_init_phy ( struct icplus_nic *icp ) {
 		return rc;
 	}
 
-	/* Configure PHY to advertise 1000Mbps if applicable */
+	// temp hack
+	mii_dump ( &icp->mii);
+
+	/* Configure PHY to advertise 1000Mbps if applicable, this will have no
+	 effect if using cards with a maximum of 100Mbps */
 	asicctrl = readl ( icp->regs + ICP_ASICCTRL );
 	if ( asicctrl & ICP_ASICCTRL_PHYSPEED1000 ) {
 		if ( ( rc = mii_write ( &icp->mii, MII_CTRL1000,
@@ -288,7 +293,7 @@ static void icplus_check_link ( struct net_device *netdev ) {
 	uint8_t phyctrl;
 
 	/* Read link status */
-	phyctrl = readb ( icp->regs + ICP_PHYCTRL );
+	phyctrl = readb ( icp->regs + icp->phyctrl );
 	DBGC ( icp, "ICPLUS %p PHY control is %02x\n", icp, phyctrl );
 
 	/* Update network device */
@@ -737,6 +742,11 @@ static int icplus_probe ( struct pci_device *pci ) {
 	if ( ( rc = icplus_reset ( icp ) ) != 0 )
 		goto err_reset;
 
+	// hack
+	icp->eepromctrl = 0x36;
+	icp->eepromdata = 0x34;
+	icp->phyctrl = 0x5e;
+
 	/* Initialise EEPROM */
 	icplus_init_eeprom ( icp );
 
@@ -747,6 +757,9 @@ static int icplus_probe ( struct pci_device *pci ) {
 		       icp, strerror ( rc ) );
 		goto err_eeprom;
 	}
+
+	DBGC ( icp, "ICPLUS %p MAC address is %s\n",
+	       icp, eth_ntoa ( netdev->hw_addr ) ); 
 
 	/* Configure PHY */
 	if ( ( rc = icplus_init_phy ( icp ) ) != 0 )
@@ -799,6 +812,7 @@ static void icplus_remove ( struct pci_device *pci ) {
 /** IC+ PCI device IDs */
 static struct pci_device_id icplus_nics[] = {
 	PCI_ROM ( 0x13f0, 0x1023, "ip1000a",	"IP1000A", 0 ),
+	PCI_ROM ( 0x1186, 0x1002, "dfe550tx",	"DFE550TX", 0 ),
 };
 
 /** IC+ PCI driver */

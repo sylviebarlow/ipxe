@@ -204,6 +204,12 @@ struct icplus_nic {
 	struct icplus_ring rx;
 	/** Receive I/O buffers */
 	struct io_buffer *rx_iobuf[ICP_NUM_DESC];
+	/** EEPROM control register offset */
+	unsigned int eepromctrl;
+	/** EEPROM data register offset */
+	unsigned int eepromdata;
+	/** PHY control register offset */
+	unsigned int phyctrl;
 };
 
 #endif /* _ICPLUS_H */
