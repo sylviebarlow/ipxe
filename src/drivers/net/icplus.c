@@ -468,8 +468,9 @@ static int icplus_open ( struct net_device *netdev ) {
 		 icp->regs + ICP_RXMODE );
 
 	/* Enable transmitter and receiver */
-	writel ( ( ICP_MACCTRL_TXENABLE | ICP_MACCTRL_RXENABLE |
-		   ICP_MACCTRL_DUPLEX ), icp->regs + ICP_MACCTRL );
+	writew ( ICP_MACCTRL0_DUPLEX, icp->regs + ICP_MACCTRL0 );
+	writew ( ( ICP_MACCTRL1_TXENABLE | ICP_MACCTRL1_RXENABLE ),
+		 icp->regs + ICP_MACCTRL1 );
 
 	/* Fill receive ring */
 	icplus_refill_rx ( icp );

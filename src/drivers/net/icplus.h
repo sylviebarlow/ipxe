@@ -72,13 +72,16 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #define ICP_INTSTATUS_LINKEVENT		0x0100		/**< Link event */
 #define ICP_INTSTATUS_RXDMACOMPLETE	0x0400		/**< RX DMA complete */
 
-/** MAC control register (double word) */
-#define ICP_MACCTRL 0x6c
-#define ICP_MACCTRL_DUPLEX		0x00000020UL	/**< Duplex select */
-#define ICP_MACCTRL_TXENABLE		0x01000000UL	/**< TX enable */
-#define ICP_MACCTRL_TXDISABLE		0x02000000UL	/**< TX disable */
-#define ICP_MACCTRL_RXENABLE		0x08000000UL	/**< RX enable */
-#define ICP_MACCTRL_RXDISABLE		0x10000000UL	/**< RX disable */
+/** MAC control register 0 (word) */
+#define ICP_MACCTRL0 0x6c
+#define ICP_MACCTRL0_DUPLEX		0x0020UL	/**< Duplex select */
+
+/** MAC control register 1 (word) */
+#define ICP_MACCTRL1 0x6e
+#define ICP_MACCTRL1_TXENABLE		0x0100UL	/**< TX enable */
+#define ICP_MACCTRL1_TXDISABLE		0x0200UL	/**< TX disable */
+#define ICP_MACCTRL1_RXENABLE		0x0800UL	/**< RX enable */
+#define ICP_MACCTRL1_RXDISABLE		0x1000UL	/**< RX disable */
 
 /** PHY control register (byte) */
 #define ICP_PHYCTRL 0x76
