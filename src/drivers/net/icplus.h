@@ -90,12 +90,12 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #define ICP_PHYCTRL_MGMTDIR		0x04		/**< Management direction */
 #define ICP_PHYCTRL_LINKSPEED		0xc0		/**< Link speed */
 
-/** Receive mode register (word) */
+/** Receive mode register (byte) */
 #define ICP_RXMODE 0x88
-#define ICP_RXMODE_UNICAST		0x0001		/**< Receive unicast */
-#define ICP_RXMODE_MULTICAST		0x0002		/**< Receice multicast */
-#define ICP_RXMODE_BROADCAST		0x0004		/**< Receive broadcast */
-#define ICP_RXMODE_ALLFRAMES		0x0008		/**< Receive all frames */
+#define ICP_RXMODE_UNICAST		0x01		/**< Receive unicast */
+#define ICP_RXMODE_MULTICAST		0x02		/**< Receice multicast */
+#define ICP_RXMODE_BROADCAST		0x04		/**< Receive broadcast */
+#define ICP_RXMODE_ALLFRAMES		0x08		/**< Receive all frames */
 
 /** List pointer receive register */
 #define ICP_RFDLISTPTR 0x1c

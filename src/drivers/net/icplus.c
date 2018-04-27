@@ -463,7 +463,7 @@ static int icplus_open ( struct net_device *netdev ) {
 	icplus_set_base ( icp, icp->rx.listptr, icp->rx.entry );
 
 	/* Enable receive mode */
-	writew ( ( ICP_RXMODE_UNICAST | ICP_RXMODE_MULTICAST |
+	writeb ( ( ICP_RXMODE_UNICAST | ICP_RXMODE_MULTICAST |
 		   ICP_RXMODE_BROADCAST | ICP_RXMODE_ALLFRAMES ),
 		 icp->regs + ICP_RXMODE );
 
