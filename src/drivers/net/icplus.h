@@ -120,8 +120,8 @@ union icplus_fragment {
 	};
 };
 
-/** Transmit or receive descriptor */
-struct icplus_descriptor {
+/** 64-bit transmit or receive descriptor */
+struct icplus_descriptor64 {
 	/** Address of next descriptor */
 	uint64_t next;
 	/** Actual length */
@@ -140,17 +140,57 @@ struct icplus_descriptor {
 	uint8_t reserved_b[8];
 };
 
-/** Descriptor complete */
-#define ICP_DONE 0x80
+/** 32-bit transmit or receive descriptor */
+struct icplus_descriptor32 {
+	/** Address of next descriptor */
+	uint32_t next;
+	/** Frames */
+	uint16_t frames;
+	/** Flags */
+	uint8_t flags;
+	/** Reserved */
+	uint8_t reserved;
+	/** Address */
+	uint32_t address;
+	/** Length */
+	uint16_t len;
+	/** Last fragment indicator */
+	uint16_t last;
+};
+
+/** IC+ descriptor */
+union icplus_descriptor {
+	/** 64-bit descriptor */ 
+	struct icplus_descriptor64 d64;
+	/** 32-bit descriptor */
+	struct icplus_descriptor32 d32;
+	/** Address of next descriptor */
+	uint64_t next;
+};
+
+/** Descriptor complete 64 bits */
+#define ICP64_DONE 0x80
+
+/** Receive descriptor complete 32 bits */
+#define ICP32_RX_DONE 0x8000
+
+/** Transmit descriptor complete 32 bits */
+#define ICP32_TX_DONE 0x01
 
 /** Transmit alignment disabled */
 #define ICP_TX_UNALIGN 0x01
 
-/** Request transmit completion */
-#define ICP_TX_INDICATE 0x40
+/** Request transmit completion 64 bits */
+#define ICP64_TX_INDICATE 0x40
 
-/** Sole transmit fragment */
-#define ICP_TX_SOLE_FRAG 0x01
+/** Request transmit completion 32 bits */
+#define ICP32_TX_INDICATE 0x8000
+
+/** Sole transmit fragment 64 bits */
+#define ICP64_TX_SOLE_FRAG 0x01
+
+/** Sole transmit or receive fragment 32 bits */
+#define ICP32_SOLE_FRAG 0x8000
 
 /** Recieve frame overrun error */
 #define ICP_RX_ERR_OVERRUN 0x01
@@ -177,9 +217,28 @@ struct icplus_ring {
 	/** Consumer counter */
 	unsigned int cons;
 	/** Ring entries */
-	struct icplus_descriptor *entry;
+	union icplus_descriptor *entry;
 	/* List pointer register */
 	unsigned int listptr;
+	/** Initialise descriptor
+	 *
+	 * @v desc		Descriptor
+	 */
+	void ( *setup ) ( union icplus_descriptor *desc );
+	/** Describe data buffer
+	 *
+	 * @v desc		Descriptor
+	 * @v address		Address
+	 * @v len		Length
+	 */
+	void ( *describe ) ( union icplus_descriptor *desc, physaddr_t address,
+			     size_t len );
+	/** Check descriptor buffer completion
+	 *
+	 * @v desc		Descriptor
+	 * @ret is_completed	Descriptor is complete
+	 */
+	int ( *completed ) ( union icplus_descriptor *desc );
 };
 
 /** Number of descriptors */

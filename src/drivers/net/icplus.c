@@ -61,8 +61,9 @@ static int icplus_reset ( struct icplus_nic *icp ) {
 
 	/* Trigger reset */
 	writel ( ( ICP_ASICCTRL_GLOBALRESET | ICP_ASICCTRL_DMA |
-		   ICP_ASICCTRL_FIFO | ICP_ASICCTRL_NETWORK | ICP_ASICCTRL_HOST |
-		   ICP_ASICCTRL_AUTOINIT ), ( icp->regs + ICP_ASICCTRL ) );
+		   ICP_ASICCTRL_FIFO | ICP_ASICCTRL_NETWORK |
+		   ICP_ASICCTRL_HOST | ICP_ASICCTRL_AUTOINIT ),
+		 ( icp->regs + ICP_ASICCTRL ) );
 
 	/* Wait for reset to complete */
 	for ( i = 0 ; i < ICP_RESET_MAX_WAIT_MS ; i++ ) {
@@ -306,6 +307,159 @@ static void icplus_check_link ( struct net_device *netdev ) {
 
 /******************************************************************************
  *
+ * Descriptor management (64 bit)
+ *
+ ******************************************************************************
+ */
+
+/**
+ * Initialise descriptor (64 bit)
+ *
+ * @v desc		Descriptor
+ */
+static void icplus_setup64 ( union icplus_descriptor *desc ) {
+	desc->d64.flags = ( ICP_TX_UNALIGN | ICP64_TX_INDICATE );
+	desc->d64.control = ( ICP64_TX_SOLE_FRAG | ICP64_DONE );
+}
+
+/**
+ * Describe receive data buffer (64 bit)
+ *
+ * @v desc		Descriptor
+ * @v address		Address
+ * @v len		Length
+ */
+static void icplus_describe_rx64 ( union icplus_descriptor *desc,
+				   physaddr_t address, size_t len __unused ) {
+	desc->d64.data.address = cpu_to_le64 ( address );
+	desc->d64.data.len = cpu_to_le16 ( ICP_RX_MAX_LEN );
+	wmb();
+	desc->d64.control = 0;
+}
+
+/**
+ * Describe transmit data buffer (64 bit)
+ *
+ * @v desc		Descriptor
+ * @v address		Address
+ * @v len		Length
+ */
+static void icplus_describe_tx64 ( union icplus_descriptor *desc,
+				   physaddr_t address, size_t len ) {
+	desc->d64.data.address = cpu_to_le64 ( address );
+	desc->d64.data.len = cpu_to_le16 ( len );
+	wmb();
+	desc->d64.control = ICP64_TX_SOLE_FRAG;
+}
+
+/**
+ * Check descriptor buffer completion (64 bit)
+ *
+ * @v desc		Descriptor
+ * @ret is_completed	Descriptor is complete
+ */
+static int icplus_completed64 ( union icplus_descriptor *desc ) {
+	return ( desc->d64.control & ICP64_DONE );
+}
+
+/**
+ * Assign function pointers (64 bit)
+ *
+ * @v icp		IC+ device
+ */
+static void icplus_init64 ( struct icplus_nic *icp ) {
+	icp->rx.describe = icplus_describe_rx64;
+	icp->tx.describe = icplus_describe_tx64;
+	icp->rx.setup = icplus_setup64;
+	icp->tx.setup = icplus_setup64;
+	icp->rx.completed = icplus_completed64;
+	icp->tx.completed = icplus_completed64;
+}
+
+/******************************************************************************
+ *
+ * Descriptor management (32 bit)
+ *
+ ******************************************************************************
+ */
+
+/**
+ * Initialise descriptor (32 bit)
+ *
+ * @v desc		Descriptor
+ */
+static void icplus_setup32 ( union icplus_descriptor *desc ) {
+	desc->d32.frames = cpu_to_le16 ( ICP_TX_UNALIGN | ICP32_TX_INDICATE );
+	desc->d32.flags = ICP32_TX_DONE;
+	desc->d32.last = cpu_to_le16 ( ICP32_SOLE_FRAG );
+}
+
+/**
+ * Describe receive data buffer (32 bit)
+ *
+ * @v desc		Descriptor
+ * @v address		Address
+ * @v len		Length
+ */
+static void icplus_describe_rx32 ( union icplus_descriptor *desc,
+				   physaddr_t address, size_t len __unused ) {
+	desc->d32.address = cpu_to_le32 ( address );
+	desc->d32.len = cpu_to_le16 ( ICP_RX_MAX_LEN );
+	wmb();
+	desc->d32.frames = 0;
+}
+
+/**
+ * Describe transmit data buffer (32 bit)
+ *
+ * @v desc		Descriptor
+ * @v address		Address
+ * @v len		Length
+ */
+static void icplus_describe_tx32 ( union icplus_descriptor *desc,
+				   physaddr_t address, size_t len ) {
+	desc->d32.address = cpu_to_le32 ( address );
+	desc->d32.len = cpu_to_le16 ( len );
+	wmb();
+	desc->d32.flags = 0;
+}
+
+/**
+ * Check receive descriptor buffer completion (32 bit)
+ *
+ * @v desc		Descriptor
+ * @ret is_completed	Descriptor is complete
+ */
+static int icplus_completed32_rx ( union icplus_descriptor *desc ) {
+	return ( desc->d32.frames & cpu_to_le16 ( ICP32_RX_DONE ) );
+}
+
+/**
+ * Check transmit descriptor buffer completion (32 bit)
+ *
+ * @v desc		Descriptor
+ * @ret is_completed	Descriptor is complete
+ */
+static int icplus_completed32_tx (union icplus_descriptor *desc ) {
+	return ( desc->d32.flags & ICP32_TX_DONE );
+}
+
+/**
+ * Assign function pointers (32 bit)
+ *
+ * @v icp		IC+ device
+ */
+static void icplus_init32 ( struct icplus_nic *icp ) {
+	icp->rx.describe = icplus_describe_rx32;
+	icp->tx.describe = icplus_describe_tx32;
+	icp->rx.setup = icplus_setup32;
+	icp->tx.setup = icplus_setup32;
+	icp->rx.completed = icplus_completed32_rx;
+	icp->tx.completed = icplus_completed32_tx;
+}
+
+/******************************************************************************
+ *
  * Network device interface
  *
  ******************************************************************************
@@ -318,8 +472,8 @@ static void icplus_check_link ( struct net_device *netdev ) {
  * @v offset		Register offset
  * @v address		Base address
  */
-static inline void icplus_set_base ( struct icplus_nic *icp, unsigned int offset,
-				     void *base ) {
+static inline void icplus_set_base ( struct icplus_nic *icp,
+				     unsigned int offset, void *base ) {
 	physaddr_t phys = virt_to_bus ( base );
 
 	/* Program base address registers */
@@ -340,12 +494,13 @@ static inline void icplus_set_base ( struct icplus_nic *icp, unsigned int offset
  * @v ring		Descriptor ring
  * @ret rc		Return status code
  */
-static int icplus_create_ring ( struct icplus_nic *icp, struct icplus_ring *ring ) {
+static int icplus_create_ring ( struct icplus_nic *icp,
+				struct icplus_ring *ring ) {
 	size_t len = ( sizeof ( ring->entry[0] ) * ICP_NUM_DESC );
 	int rc;
 	unsigned int i;
-	struct icplus_descriptor *desc;
-	struct icplus_descriptor *next;
+	union icplus_descriptor *desc;
+	union icplus_descriptor *next;
 
 	/* Allocate descriptor ring */
 	ring->entry = malloc_dma ( len, ICP_ALIGN );
@@ -360,8 +515,7 @@ static int icplus_create_ring ( struct icplus_nic *icp, struct icplus_ring *ring
 		desc = &ring->entry[i];
 		next = &ring->entry[ ( i + 1 ) % ICP_NUM_DESC ];
 		desc->next = cpu_to_le64 ( virt_to_bus ( next ) );
-		desc->flags = ( ICP_TX_UNALIGN | ICP_TX_INDICATE );
-		desc->control = ( ICP_TX_SOLE_FRAG | ICP_DONE );
+		ring->setup ( desc );
 	}
 
 	/* Reset transmit producer & consumer counters */
@@ -369,7 +523,7 @@ static int icplus_create_ring ( struct icplus_nic *icp, struct icplus_ring *ring
 	ring->cons = 0;
 
 	DBGC ( icp, "ICP %p %s ring at [%#08lx,%#08lx)\n",
-	       icp, ( ( ring->listptr == ICP_TFDLISTPTR ) ? "TX" : "RX" ),
+	       icp, ( ( ring == &icp->tx ) ? "TX" : "RX" ),
 	       virt_to_bus ( ring->entry ),
 	       ( virt_to_bus ( ring->entry ) + len ) );
 	return 0;
@@ -401,7 +555,7 @@ static void icplus_destroy_ring ( struct icplus_nic *icp __unused,
  * @v icp		IC+ device
  */
 void icplus_refill_rx ( struct icplus_nic *icp ) {
-	struct icplus_descriptor *desc;
+	union icplus_descriptor *desc;
 	struct io_buffer *iobuf;
 	unsigned int rx_idx;
 	physaddr_t address;
@@ -423,10 +577,8 @@ void icplus_refill_rx ( struct icplus_nic *icp ) {
 
 		/* Populate receive descriptor */
 		address = virt_to_bus ( iobuf->data );
-	        desc->data.address = cpu_to_le64 ( address );
-		desc->data.len = cpu_to_le16 ( ICP_RX_MAX_LEN );
+		icp->rx.describe ( desc, address, 0 );
 		wmb();
-		desc->control = 0;
 
 		/* Record I/O buffer */
 		assert ( icp->rx_iobuf[rx_idx] == NULL );
@@ -529,9 +681,10 @@ static void icplus_close ( struct net_device *netdev ) {
 static int icplus_transmit ( struct net_device *netdev,
 			     struct io_buffer *iobuf ) {
 	struct icplus_nic *icp = netdev->priv;
-	struct icplus_descriptor *desc;
+	union icplus_descriptor *desc;
 	unsigned int tx_idx;
 	physaddr_t address;
+	size_t len;
 
 	/* Check if ring is full */
 	if ( ( icp->tx.prod - icp->tx.cons ) >= ICP_NUM_DESC ) {
@@ -545,10 +698,8 @@ static int icplus_transmit ( struct net_device *netdev,
 
 	/* Fill in TX descriptor */
 	address = virt_to_bus ( iobuf->data );
-	desc->data.address = cpu_to_le64 ( address );
-	desc->data.len = cpu_to_le16 ( iob_len ( iobuf ) );
-	wmb();
-	desc->control = ICP_TX_SOLE_FRAG;
+	len = iob_len ( iobuf );
+	icp->tx.describe ( desc, address, len );
 	wmb();
 
 	/* Ring doorbell */
@@ -568,7 +719,7 @@ static int icplus_transmit ( struct net_device *netdev,
  */
 static void icplus_poll_tx ( struct net_device *netdev ) {
 	struct icplus_nic *icp = netdev->priv;
-	struct icplus_descriptor *desc;
+	union icplus_descriptor *desc;
 	unsigned int tx_idx;
 
 	/* Check for completed packets */
@@ -579,7 +730,7 @@ static void icplus_poll_tx ( struct net_device *netdev ) {
 		desc = &icp->tx.entry[tx_idx];
 
 		/* Stop if descriptor is still in use */
-		if ( ! ( desc->control & ICP_DONE ) )
+		if ( ! icp->tx.completed ( desc ) )
 			return;
 
 		/* Complete TX descriptor */
@@ -596,7 +747,7 @@ static void icplus_poll_tx ( struct net_device *netdev ) {
  */
 static void icplus_poll_rx ( struct net_device *netdev ) {
 	struct icplus_nic *icp = netdev->priv;
-	struct icplus_descriptor *desc;
+	union icplus_descriptor *desc;
 	struct io_buffer *iobuf;
 	unsigned int rx_idx;
 	size_t len;
@@ -609,21 +760,22 @@ static void icplus_poll_rx ( struct net_device *netdev ) {
 		desc = &icp->rx.entry[rx_idx];
 
 		/* Stop if descriptor is still in use */
-		if ( ! ( desc->control & ICP_DONE ) )
+		if ( ! icp->rx.completed ( desc ) )
 			return;
 
 		/* Populate I/O buffer */
 		iobuf = icp->rx_iobuf[rx_idx];
 		icp->rx_iobuf[rx_idx] = NULL;
-		len = le16_to_cpu ( desc->len );
+		len = le16_to_cpu ( desc->d64.len );
 		iob_put ( iobuf, len );
 
 		/* Hand off to network stack */
-		if ( desc->flags & ( ICP_RX_ERR_OVERRUN | ICP_RX_ERR_RUNT |
-				     ICP_RX_ERR_ALIGN | ICP_RX_ERR_FCS |
-				     ICP_RX_ERR_OVERSIZED | ICP_RX_ERR_LEN ) ) {
-			DBGC ( icp, "ICP %p RX %d error (length %zd, "
-			       "flags %02x)\n", icp, rx_idx, len, desc->flags );
+		if ( desc->d64.flags & ( ICP_RX_ERR_OVERRUN | ICP_RX_ERR_RUNT |
+					 ICP_RX_ERR_ALIGN | ICP_RX_ERR_FCS |
+					 ICP_RX_ERR_OVERSIZED |
+					 ICP_RX_ERR_LEN ) ) {
+			DBGC ( icp, "ICP %p RX %d error (length %zd, flags "
+			       "%02x)\n", icp, rx_idx, len, desc->d64.flags );
 			netdev_rx_err ( netdev, iobuf, -EIO );
 		} else {
 			DBGC2 ( icp, "ICP %p RX %d complete (length "
@@ -657,7 +809,8 @@ static void icplus_poll ( struct net_device *netdev ) {
 
 	/* Poll for RX completions, if applicable */
 	if ( intstatus & ICP_INTSTATUS_RXDMACOMPLETE ) {
-		writew ( ICP_INTSTATUS_RXDMACOMPLETE, icp->regs + ICP_INTSTATUS );
+		writew ( ICP_INTSTATUS_RXDMACOMPLETE,
+			 icp->regs + ICP_INTSTATUS );
 		icplus_poll_rx ( netdev );
 	}
 
@@ -728,6 +881,13 @@ static int icplus_probe ( struct pci_device *pci ) {
 	icp->tx.listptr = ICP_TFDLISTPTR;
 	icp->rx.listptr = ICP_RFDLISTPTR;
 
+	/* Temporary hack */
+	if ( 1 ) {
+		icplus_init64 ( icp );
+	} else {
+		icplus_init32 ( icp );
+	}
+
 	/* Fix up PCI device */
 	adjust_pci_device ( pci );
 
@@ -753,8 +913,8 @@ static int icplus_probe ( struct pci_device *pci ) {
 	/* Read EEPROM MAC address */
 	if ( ( rc = nvs_read ( &icp->eeprom, ICP_EEPROM_MAC,
 			       netdev->hw_addr, ETH_ALEN ) ) != 0 ) {
-		DBGC ( icp, "ICPLUS %p could not read EEPROM MAC address: %s\n",
-		       icp, strerror ( rc ) );
+		DBGC ( icp, "ICPLUS %p could not read EEPROM MAC address: "
+		       "%s\n", icp, strerror ( rc ) );
 		goto err_eeprom;
 	}
 
