@@ -259,9 +259,6 @@ static int icplus_init_phy ( struct icplus_nic *icp ) {
 		return rc;
 	}
 
-	// temp hack
-	mii_dump ( &icp->mii);
-
 	/* Configure PHY to advertise 1000Mbps if applicable, this will have no
 	 effect if using cards with a maximum of 100Mbps */
 	asicctrl = readl ( icp->regs + ICP_ASICCTRL );
@@ -374,6 +371,9 @@ static void icplus_init64 ( struct icplus_nic *icp ) {
 	icp->tx.setup = icplus_setup64;
 	icp->rx.completed = icplus_completed64;
 	icp->tx.completed = icplus_completed64;
+	icp->eepromctrl = ICP64_EEPROMCTRL;
+	icp->eepromdata = ICP64_EEPROMDATA;
+	icp->phyctrl = ICP64_PHYCTRL;
 }
 
 /******************************************************************************
@@ -456,6 +456,9 @@ static void icplus_init32 ( struct icplus_nic *icp ) {
 	icp->tx.setup = icplus_setup32;
 	icp->rx.completed = icplus_completed32_rx;
 	icp->tx.completed = icplus_completed32_tx;
+	icp->eepromctrl = ICP32_EEPROMCTRL;
+	icp->eepromdata = ICP32_EEPROMDATA;
+	icp->phyctrl = ICP32_PHYCTRL;
 }
 
 /******************************************************************************
@@ -901,11 +904,6 @@ static int icplus_probe ( struct pci_device *pci ) {
 	/* Reset the NIC */
 	if ( ( rc = icplus_reset ( icp ) ) != 0 )
 		goto err_reset;
-
-	// hack
-	icp->eepromctrl = 0x36;
-	icp->eepromdata = 0x34;
-	icp->phyctrl = 0x5e;
 
 	/* Initialise EEPROM */
 	icplus_init_eeprom ( icp );

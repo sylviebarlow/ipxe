@@ -44,7 +44,8 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #define ICP_DMACTRL_TXPOLLNOW 		0x1000		/**< Transmit poll now */
 
 /** EEPROM control register (word) */
-#define ICP_EEPROMCTRL 0x4a
+#define ICP64_EEPROMCTRL 0x4a
+#define ICP32_EEPROMCTRL 0x36
 #define ICP_EEPROMCTRL_ADDRESS( x )	( (x) << 0 )	/**< Address */
 #define ICP_EEPROMCTRL_OPCODE( x )	( (x) << 8 )	/**< Opcode */
 #define ICP_EEPROMCTRL_OPCODE_READ \
@@ -64,7 +65,8 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #define ICP_EEPROM_MAC 0x10
 
 /** EEPROM data register (word) */
-#define ICP_EEPROMDATA 0x48
+#define ICP64_EEPROMDATA 0x48
+#define ICP32_EEPROMDATA 0x34
 
 /** Interupt status register (word) */
 #define ICP_INTSTATUS 0x5e
@@ -84,7 +86,8 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #define ICP_MACCTRL1_RXDISABLE		0x1000UL	/**< RX disable */
 
 /** PHY control register (byte) */
-#define ICP_PHYCTRL 0x76
+#define ICP64_PHYCTRL 0x76
+#define ICP32_PHYCTRL 0x5e
 #define ICP_PHYCTRL_MGMTCLK		0x01		/**< Management clock */
 #define ICP_PHYCTRL_MGMTDATA		0x02		/**< Management data */
 #define ICP_PHYCTRL_MGMTDIR		0x04		/**< Management direction */
