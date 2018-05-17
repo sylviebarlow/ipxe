@@ -304,7 +304,7 @@ static void icplus_check_link ( struct net_device *netdev ) {
 
 /******************************************************************************
  *
- * Descriptor management (64 bit)
+ * Card management (64 bit)
  *
  ******************************************************************************
  */
@@ -378,7 +378,7 @@ static void icplus_init64 ( struct icplus_nic *icp ) {
 
 /******************************************************************************
  *
- * Descriptor management (32 bit)
+ * Card management (32 bit)
  *
  ******************************************************************************
  */
@@ -459,6 +459,11 @@ static void icplus_init32 ( struct icplus_nic *icp ) {
 	icp->eepromctrl = ICP32_EEPROMCTRL;
 	icp->eepromdata = ICP32_EEPROMDATA;
 	icp->phyctrl = ICP32_PHYCTRL;
+	icp->tx.listptr = ICP_TFDLISTPTR;
+	icp->rx.listptr = ICP_RFDLISTPTR;
+	/* Temporary and needs changing */
+	icp->tx.listptr = ICP_TFDLISTPTR;
+	icp->rx.listptr = ICP_RFDLISTPTR;
 }
 
 /******************************************************************************
@@ -878,18 +883,18 @@ static int icplus_probe ( struct pci_device *pci ) {
 	pci_set_drvdata ( pci, netdev );
 	netdev->dev = &pci->dev;
 	memset ( icp, 0, sizeof ( *icp ) );
-	icp->miibit.basher.op = &icplus_basher_ops;
-	init_mii_bit_basher ( &icp->miibit );
-	mii_init ( &icp->mii, &icp->miibit.mdio, 0 );
-	icp->tx.listptr = ICP_TFDLISTPTR;
-	icp->rx.listptr = ICP_RFDLISTPTR;
 
 	/* Temporary hack */
-	if ( 1 ) {
+	if ( 0 ) {
 		icplus_init64 ( icp );
 	} else {
 		icplus_init32 ( icp );
 	}
+
+	/* Allocate and initialise mii interface */
+	icp->miibit.basher.op = &icplus_basher_ops;
+	init_mii_bit_basher ( &icp->miibit );
+	mii_init ( &icp->mii, &icp->miibit.mdio, 0 );
 
 	/* Fix up PCI device */
 	adjust_pci_device ( pci );
