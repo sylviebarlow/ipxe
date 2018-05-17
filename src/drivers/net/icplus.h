@@ -12,6 +12,12 @@
 
 FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 
+/** Card variant (64 bit) */
+#define ICP_64BIT 0
+
+/** Card variant (32 bit) */
+#define ICP_32BIT 1
+
 /** BAR size */
 #define ICP_BAR_SIZE 0x200
 

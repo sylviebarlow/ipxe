@@ -884,8 +884,8 @@ static int icplus_probe ( struct pci_device *pci ) {
 	netdev->dev = &pci->dev;
 	memset ( icp, 0, sizeof ( *icp ) );
 
-	/* Temporary hack */
-	if ( 0 ) {
+	/* Identify card */
+	if ( pci->id->driver_data == ICP_64BIT ) {
 		icplus_init64 ( icp );
 	} else {
 		icplus_init32 ( icp );
@@ -974,8 +974,8 @@ static void icplus_remove ( struct pci_device *pci ) {
 
 /** IC+ PCI device IDs */
 static struct pci_device_id icplus_nics[] = {
-	PCI_ROM ( 0x13f0, 0x1023, "ip1000a",	"IP1000A", 0 ),
-	PCI_ROM ( 0x1186, 0x1002, "dfe550tx",	"DFE550TX", 0 ),
+	PCI_ROM ( 0x13f0, 0x1023, "ip1000a",	"IP1000A",	ICP_64BIT ),
+	PCI_ROM ( 0x1186, 0x1002, "dfe550tx",	"DFE550TX",	ICP_32BIT ),
 };
 
 /** IC+ PCI driver */
