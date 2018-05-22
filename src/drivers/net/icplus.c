@@ -360,6 +360,21 @@ static int icplus_completed64 ( union icplus_descriptor *desc ) {
 }
 
 /**
+ * Check descriptor buffer completion
+ *
+ * @v desc		Descriptor
+ * @ret len		Length of packet
+ */
+static int icplus_len64 ( union icplus_descriptor *desc ) {
+	if ( desc->d64.flags & ( ICP_RX_ERR_OVERRUN | ICP_RX_ERR_RUNT |
+				 ICP_RX_ERR_ALIGN | ICP_RX_ERR_FCS |
+				 ICP_RX_ERR_OVERSIZED | ICP_RX_ERR_LEN ) ) {
+		return -desc->d64.flags;
+	}
+	return le16_to_cpu ( desc->d64.len );
+}
+
+/**
  * Assign function pointers (64 bit)
  *
  * @v icp		IC+ device
@@ -371,9 +386,16 @@ static void icplus_init64 ( struct icplus_nic *icp ) {
 	icp->tx.setup = icplus_setup64;
 	icp->rx.completed = icplus_completed64;
 	icp->tx.completed = icplus_completed64;
+	icp->rx.len = icplus_len64;
 	icp->eepromctrl = ICP64_EEPROMCTRL;
 	icp->eepromdata = ICP64_EEPROMDATA;
 	icp->phyctrl = ICP64_PHYCTRL;
+	icp->macctrl0 = ICP64_MACCTRL0;
+	icp->macctrl1 = ICP64_MACCTRL1;
+	icp->txstatus = ICP64_TXSTATUS;
+	/* Temporary and needs changing */
+	icp->tx.listptr = ICP_TFDLISTPTR;
+	icp->rx.listptr = ICP_RFDLISTPTR;
 }
 
 /******************************************************************************
@@ -445,6 +467,19 @@ static int icplus_completed32_tx (union icplus_descriptor *desc ) {
 }
 
 /**
+ * Check descriptor buffer completion
+ *
+ * @v desc		Descriptor
+ * @ret len		Length of packet
+ */
+static int icplus_len32 ( union icplus_descriptor *desc ) {
+	if ( desc->d32.frames & cpu_to_le16 ( ICP_RXFRAMEERROR ) ) {
+		return -desc->d32.frames;
+	}
+	return le16_to_cpu ( desc->d32.frames ) & ICP_RXFRAMEERROR;
+}
+
+/**
  * Assign function pointers (32 bit)
  *
  * @v icp		IC+ device
@@ -456,11 +491,13 @@ static void icplus_init32 ( struct icplus_nic *icp ) {
 	icp->tx.setup = icplus_setup32;
 	icp->rx.completed = icplus_completed32_rx;
 	icp->tx.completed = icplus_completed32_tx;
+	icp->rx.len = icplus_len32;
 	icp->eepromctrl = ICP32_EEPROMCTRL;
 	icp->eepromdata = ICP32_EEPROMDATA;
 	icp->phyctrl = ICP32_PHYCTRL;
-	icp->tx.listptr = ICP_TFDLISTPTR;
-	icp->rx.listptr = ICP_RFDLISTPTR;
+	icp->macctrl0 = ICP32_MACCTRL0;
+	icp->macctrl1 = ICP32_MACCTRL1;
+	icp->txstatus = ICP32_TXSTATUS;
 	/* Temporary and needs changing */
 	icp->tx.listptr = ICP_TFDLISTPTR;
 	icp->rx.listptr = ICP_RFDLISTPTR;
@@ -633,9 +670,9 @@ static int icplus_open ( struct net_device *netdev ) {
 		 icp->regs + ICP_RXMODE );
 
 	/* Enable transmitter and receiver */
-	writew ( ICP_MACCTRL0_DUPLEX, icp->regs + ICP_MACCTRL0 );
+	writew ( ICP_MACCTRL0_DUPLEX, icp->regs + icp->macctrl0 );
 	writew ( ( ICP_MACCTRL1_TXENABLE | ICP_MACCTRL1_RXENABLE ),
-		 icp->regs + ICP_MACCTRL1 );
+		 icp->regs + icp->macctrl1 );
 
 	/* Fill receive ring */
 	icplus_refill_rx ( icp );
@@ -758,7 +795,7 @@ static void icplus_poll_rx ( struct net_device *netdev ) {
 	union icplus_descriptor *desc;
 	struct io_buffer *iobuf;
 	unsigned int rx_idx;
-	size_t len;
+	int len;
 
 	/* Check for received packets */
 	while ( icp->rx.cons != icp->rx.prod ) {
@@ -774,20 +811,17 @@ static void icplus_poll_rx ( struct net_device *netdev ) {
 		/* Populate I/O buffer */
 		iobuf = icp->rx_iobuf[rx_idx];
 		icp->rx_iobuf[rx_idx] = NULL;
-		len = le16_to_cpu ( desc->d64.len );
-		iob_put ( iobuf, len );
+		len = icp->rx.len ( desc );
 
 		/* Hand off to network stack */
-		if ( desc->d64.flags & ( ICP_RX_ERR_OVERRUN | ICP_RX_ERR_RUNT |
-					 ICP_RX_ERR_ALIGN | ICP_RX_ERR_FCS |
-					 ICP_RX_ERR_OVERSIZED |
-					 ICP_RX_ERR_LEN ) ) {
-			DBGC ( icp, "ICP %p RX %d error (length %zd, flags "
-			       "%02x)\n", icp, rx_idx, len, desc->d64.flags );
+		if ( len < 0 ) {
+			DBGC ( icp, "ICP %p RX %d error (flags %02x)\n",
+			       icp, rx_idx, -len );
 			netdev_rx_err ( netdev, iobuf, -EIO );
 		} else {
 			DBGC2 ( icp, "ICP %p RX %d complete (length "
 				"%zd)\n", icp, rx_idx, len );
+			iob_put ( iobuf, len );
 			netdev_rx ( netdev, iobuf );
 		}
 		icp->rx.cons++;
@@ -802,16 +836,25 @@ static void icplus_poll_rx ( struct net_device *netdev ) {
 static void icplus_poll ( struct net_device *netdev ) {
 	struct icplus_nic *icp = netdev->priv;
 	uint16_t intstatus;
-	uint32_t txstatus;
+	uint16_t txstatus;
 
 	/* Check for interrupts */
 	intstatus = readw ( icp->regs + ICP_INTSTATUS );
 
 	/* Poll for TX completions, if applicable */
 	if ( intstatus & ICP_INTSTATUS_TXCOMPLETE ) {
-		txstatus = readl ( icp->regs + ICP_TXSTATUS );
-		if ( txstatus & ICP_TXSTATUS_ERROR )
-			DBGC ( icp, "ICP %p TX error: %08x\n", icp, txstatus );
+		txstatus = readw ( icp->regs + icp->txstatus );
+		if ( txstatus & ( ICP_TXSTATUS_LATECOLLISION |
+				  ICP_TXSTATUS_MAXCOLLISIONS |
+				  ICP_TXSTATUS_UNDERRUN ) ) {
+			DBGC ( icp, "ICP %p TX error: %04x\n", icp, txstatus );
+			if ( txstatus & ICP_TXSTATUS_UNDERRUN ) {
+				writel (ICP_ASICCTRL_TXRESET,
+					icp->regs + ICP_ASICCTRL);
+			}
+			writew ( ICP_MACCTRL1_TXENABLE,
+				 icp->regs + icp->macctrl1 );
+		}
 		icplus_poll_tx ( netdev );
 	}
 

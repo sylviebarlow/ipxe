@@ -34,6 +34,7 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #define ICP_ASICCTRL 0x30
 #define ICP_ASICCTRL_PHYSPEED1000	0x00000040UL	/**< PHY speed 1000 */
 #define ICP_ASICCTRL_GLOBALRESET	0x00010000UL	/**< Global reset */
+#define ICP_ASICCTRL_TXRESET		0x00040000UL	/**< Transmit reset */
 #define ICP_ASICCTRL_DMA		0x00080000UL	/**< DMA */
 #define ICP_ASICCTRL_FIFO		0x00100000UL	/**< FIFO */
 #define ICP_ASICCTRL_NETWORK		0x00200000UL	/**< Network */
@@ -81,11 +82,13 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #define ICP_INTSTATUS_RXDMACOMPLETE	0x0400		/**< RX DMA complete */
 
 /** MAC control register 0 (word) */
-#define ICP_MACCTRL0 0x6c
+#define ICP64_MACCTRL0 0x6c
+#define ICP32_MACCTRL0 0x50
 #define ICP_MACCTRL0_DUPLEX		0x0020UL	/**< Duplex select */
 
 /** MAC control register 1 (word) */
-#define ICP_MACCTRL1 0x6e
+#define ICP64_MACCTRL1 0x6e
+#define ICP32_MACCTRL1 0x52
 #define ICP_MACCTRL1_TXENABLE		0x0100UL	/**< TX enable */
 #define ICP_MACCTRL1_TXDISABLE		0x0200UL	/**< TX disable */
 #define ICP_MACCTRL1_RXENABLE		0x0800UL	/**< RX enable */
@@ -105,6 +108,13 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #define ICP_RXMODE_MULTICAST		0x02		/**< Receice multicast */
 #define ICP_RXMODE_BROADCAST		0x04		/**< Receive broadcast */
 #define ICP_RXMODE_ALLFRAMES		0x08		/**< Receive all frames */
+
+/** Transmit status register (word) */
+#define ICP64_TXSTATUS 0x60
+#define ICP32_TXSTATUS 0x46
+#define ICP_TXSTATUS_LATECOLLISION	0x0004UL	/**< Late collision */
+#define ICP_TXSTATUS_MAXCOLLISIONS	0x0008UL	/**< Max collisions */
+#define ICP_TXSTATUS_UNDERRUN		0x0010UL	/**< Under run */
 
 /** List pointer receive register */
 #define ICP_RFDLISTPTR 0x1c
@@ -219,6 +229,9 @@ union icplus_descriptor {
 /** Recieve length error */
 #define ICP_RX_ERR_LEN 0x20
 
+/** Receive all errors */
+#define ICP_RXFRAMEERROR 0x4000
+
 /** Descriptor ring */
 struct icplus_ring {
 	/** Producer counter */
@@ -248,6 +261,12 @@ struct icplus_ring {
 	 * @ret is_completed	Descriptor is complete
 	 */
 	int ( *completed ) ( union icplus_descriptor *desc );
+	/** Check descriptor buffer completion
+	 *
+	 * @v desc		Descriptor
+	 * @ret len		Length of packet
+	 */
+	int ( *len ) ( union icplus_descriptor *desc );
 };
 
 /** Number of descriptors */
@@ -278,6 +297,12 @@ struct icplus_nic {
 	unsigned int eepromdata;
 	/** PHY control register offset */
 	unsigned int phyctrl;
+	/** MAC control 0 register offset */
+	unsigned int macctrl0;
+	/** MAC control 1 register offset */
+	unsigned int macctrl1;
+	/** Transmit status registers offset */
+	unsigned int txstatus;
 };
 
 #endif /* _ICPLUS_H */
