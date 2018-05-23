@@ -375,6 +375,28 @@ static int icplus_len64 ( union icplus_descriptor *desc ) {
 }
 
 /**
+ * Set descriptor ring base address
+ *
+ * @v icp		IC+ device
+ * @v offset		Register offset
+ * @v address		Base address
+ */
+static void icplus_set_base64 ( struct icplus_nic *icp,
+				unsigned int offset, void *base ) {
+	physaddr_t phys = virt_to_bus ( base );
+
+	/* Program base address registers */
+	writel ( ( phys & 0xffffffffUL ),
+		 ( icp->regs + offset + ICP_BASE_LO ) );
+	if ( sizeof ( phys ) > sizeof ( uint32_t ) ) {
+		writel ( ( ( ( uint64_t ) phys ) >> 32 ),
+			 ( icp->regs + offset + ICP_BASE_HI ) );
+	} else {
+		writel ( 0, ( icp->regs + offset + ICP_BASE_HI ) );
+	}
+}
+
+/**
  * Assign function pointers (64 bit)
  *
  * @v icp		IC+ device
@@ -393,6 +415,7 @@ static void icplus_init64 ( struct icplus_nic *icp ) {
 	icp->macctrl0 = ICP64_MACCTRL0;
 	icp->macctrl1 = ICP64_MACCTRL1;
 	icp->txstatus = ICP64_TXSTATUS;
+	icp->setbase = icplus_set_base64;
 	/* Temporary and needs changing */
 	icp->tx.listptr = ICP_TFDLISTPTR;
 	icp->rx.listptr = ICP_RFDLISTPTR;
@@ -480,6 +503,21 @@ static int icplus_len32 ( union icplus_descriptor *desc ) {
 }
 
 /**
+ * Set descriptor ring base address
+ *
+ * @v icp		IC+ device
+ * @v offset		Register offset
+ * @v address		Base address
+ */
+static void icplus_set_base32 ( struct icplus_nic *icp,
+				unsigned int offset, void *base ) {
+	physaddr_t phys = virt_to_bus ( base );
+
+	/* Program base address registers */
+	writel ( phys, icp->regs + offset );
+}
+
+/**
  * Assign function pointers (32 bit)
  *
  * @v icp		IC+ device
@@ -498,6 +536,7 @@ static void icplus_init32 ( struct icplus_nic *icp ) {
 	icp->macctrl0 = ICP32_MACCTRL0;
 	icp->macctrl1 = ICP32_MACCTRL1;
 	icp->txstatus = ICP32_TXSTATUS;
+	icp->setbase = icplus_set_base32;
 	/* Temporary and needs changing */
 	icp->tx.listptr = ICP_TFDLISTPTR;
 	icp->rx.listptr = ICP_RFDLISTPTR;
@@ -509,28 +548,6 @@ static void icplus_init32 ( struct icplus_nic *icp ) {
  *
  ******************************************************************************
  */
-
-/**
- * Set descriptor ring base address
- *
- * @v icp		IC+ device
- * @v offset		Register offset
- * @v address		Base address
- */
-static inline void icplus_set_base ( struct icplus_nic *icp,
-				     unsigned int offset, void *base ) {
-	physaddr_t phys = virt_to_bus ( base );
-
-	/* Program base address registers */
-	writel ( ( phys & 0xffffffffUL ),
-		 ( icp->regs + offset + ICP_BASE_LO ) );
-	if ( sizeof ( phys ) > sizeof ( uint32_t ) ) {
-		writel ( ( ( ( uint64_t ) phys ) >> 32 ),
-			 ( icp->regs + offset + ICP_BASE_HI ) );
-	} else {
-		writel ( 0, ( icp->regs + offset + ICP_BASE_HI ) );
-	}
-}
 
 /**
  * Create descriptor ring
@@ -661,8 +678,8 @@ static int icplus_open ( struct net_device *netdev ) {
 		goto err_create_rx;
 
 	/* Program descriptor base address */
-	icplus_set_base ( icp, icp->tx.listptr, icp->tx.entry );
-	icplus_set_base ( icp, icp->rx.listptr, icp->rx.entry );
+	icp->setbase ( icp, icp->tx.listptr, icp->tx.entry );
+	icp->setbase ( icp, icp->rx.listptr, icp->rx.entry );
 
 	/* Enable receive mode */
 	writeb ( ( ICP_RXMODE_UNICAST | ICP_RXMODE_MULTICAST |

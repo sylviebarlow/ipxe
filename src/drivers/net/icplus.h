@@ -299,6 +299,14 @@ struct icplus_nic {
 	unsigned int macctrl1;
 	/** Transmit status registers offset */
 	unsigned int txstatus;
+	/** Check descriptor buffer completion
+	 *
+	 * @v icp		IC+ device
+	 * @v offset		Register offset
+	 * @v address		Base address
+	 */
+	void ( *setbase ) ( struct icplus_nic *icp,
+			    unsigned int offset, void *base );
 };
 
 #endif /* _ICPLUS_H */
