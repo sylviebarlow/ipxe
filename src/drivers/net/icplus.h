@@ -122,10 +122,6 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 /** List pointer transmit register */
 #define ICP_TFDLISTPTR 0x10
 
-/** Transmit status register */
-#define ICP_TXSTATUS 0x60
-#define ICP_TXSTATUS_ERROR		0x00000001UL	/**< TX error */
-
 /** Data fragment */
 union icplus_fragment {
 	/** Address of data */

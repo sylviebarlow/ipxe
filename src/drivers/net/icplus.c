@@ -780,7 +780,7 @@ static void icplus_poll_tx ( struct net_device *netdev ) {
 
 		/* Complete TX descriptor */
 		DBGC2 ( icp, "ICP %p TX %d complete\n", icp, tx_idx );
-		writew ( 0, icp->regs + ICP_TXSTATUS );
+		writew ( 0, icp->regs + icp->txstatus );
 		netdev_tx_complete_next ( netdev );
 		icp->tx.cons++;
 	}
