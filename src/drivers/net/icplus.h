@@ -76,7 +76,8 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #define ICP32_EEPROMDATA 0x34
 
 /** Interupt status register (word) */
-#define ICP_INTSTATUS 0x5e
+#define ICP64_INTSTATUS 0x5e
+#define ICP32_INTSTATUS 0x50
 #define ICP_INTSTATUS_TXCOMPLETE	0x0004		/**< TX complete */
 #define ICP_INTSTATUS_LINKEVENT		0x0100		/**< Link event */
 #define ICP_INTSTATUS_RXDMACOMPLETE	0x0400		/**< RX DMA complete */
@@ -103,7 +104,8 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #define ICP_PHYCTRL_LINKSPEED		0xc0		/**< Link speed */
 
 /** Receive mode register (byte) */
-#define ICP_RXMODE 0x88
+#define ICP64_RXMODE 0x88
+#define ICP32_RXMODE 0x5c
 #define ICP_RXMODE_UNICAST		0x01		/**< Receive unicast */
 #define ICP_RXMODE_MULTICAST		0x02		/**< Receice multicast */
 #define ICP_RXMODE_BROADCAST		0x04		/**< Receive broadcast */
@@ -117,10 +119,12 @@ FILE_LICENCE ( GPL2_OR_LATER_OR_UBDL );
 #define ICP_TXSTATUS_UNDERRUN		0x0010UL	/**< Under run */
 
 /** List pointer receive register */
-#define ICP_RFDLISTPTR 0x1c
+#define ICP64_RXLISTPTR 0x1c
+#define ICP32_RXLISTPTR 0x10
 
 /** List pointer transmit register */
-#define ICP_TFDLISTPTR 0x10
+#define ICP64_TXLISTPTR 0x10
+#define ICP32_TXLISTPTR 0x04
 
 /** Data fragment */
 union icplus_fragment {
@@ -297,8 +301,12 @@ struct icplus_nic {
 	unsigned int macctrl0;
 	/** MAC control 1 register offset */
 	unsigned int macctrl1;
-	/** Transmit status registers offset */
+	/** Transmit status register offset */
 	unsigned int txstatus;
+	/** Int status register offset */
+	unsigned int intstatus;
+	/** Receive mode  register offset */
+	unsigned int rxmode;
 	/** Check descriptor buffer completion
 	 *
 	 * @v icp		IC+ device

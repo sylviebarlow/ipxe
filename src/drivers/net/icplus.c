@@ -415,10 +415,12 @@ static void icplus_init64 ( struct icplus_nic *icp ) {
 	icp->macctrl0 = ICP64_MACCTRL0;
 	icp->macctrl1 = ICP64_MACCTRL1;
 	icp->txstatus = ICP64_TXSTATUS;
+	icp->intstatus = ICP64_INTSTATUS;
+	icp->rxmode = ICP64_RXMODE;
 	icp->setbase = icplus_setbase64;
 	/* Temporary and needs changing */
-	icp->tx.listptr = ICP_TFDLISTPTR;
-	icp->rx.listptr = ICP_RFDLISTPTR;
+	icp->tx.listptr = ICP64_TXLISTPTR;
+	icp->rx.listptr = ICP64_RXLISTPTR;
 }
 
 /******************************************************************************
@@ -536,10 +538,12 @@ static void icplus_init32 ( struct icplus_nic *icp ) {
 	icp->macctrl0 = ICP32_MACCTRL0;
 	icp->macctrl1 = ICP32_MACCTRL1;
 	icp->txstatus = ICP32_TXSTATUS;
+	icp->intstatus = ICP32_INTSTATUS;
+	icp->rxmode = ICP32_RXMODE;
 	icp->setbase = icplus_setbase32;
 	/* Temporary and needs changing */
-	icp->tx.listptr = ICP_TFDLISTPTR;
-	icp->rx.listptr = ICP_RFDLISTPTR;
+	icp->tx.listptr = ICP32_TXLISTPTR;
+	icp->rx.listptr = ICP32_RXLISTPTR;
 }
 
 /******************************************************************************
@@ -684,7 +688,7 @@ static int icplus_open ( struct net_device *netdev ) {
 	/* Enable receive mode */
 	writeb ( ( ICP_RXMODE_UNICAST | ICP_RXMODE_MULTICAST |
 		   ICP_RXMODE_BROADCAST | ICP_RXMODE_ALLFRAMES ),
-		 icp->regs + ICP_RXMODE );
+		 icp->regs + icp->rxmode );
 
 	/* Enable transmitter and receiver */
 	writew ( ICP_MACCTRL0_DUPLEX, icp->regs + icp->macctrl0 );
@@ -715,6 +719,15 @@ static int icplus_open ( struct net_device *netdev ) {
 static void icplus_close ( struct net_device *netdev ) {
 	struct icplus_nic *icp = netdev->priv;
 	unsigned int i;
+
+	// Temporary dump hack
+	DBGC ( icp, "ICP %p TX ListPTR=%08x\n", icp,
+	       readl ( icp->regs + 0x04 ) );
+	DBGC_HDA ( icp, 0, icp->tx.entry, 128 );
+	DBGC ( icp, "ICP %p TX DMAcontrl=%04x\n", icp,
+	       readw ( icp->regs + 0x00 ) );
+	DBGC ( icp, "ICP %p TX TXstatus=%04x\n", icp,
+	       readw ( icp->regs + 0x46 ) );
 
 	/* Perform global reset */
 	icplus_reset ( icp );
@@ -857,11 +870,13 @@ static void icplus_poll ( struct net_device *netdev ) {
 	uint16_t txstatus;
 
 	/* Check for interrupts */
-	intstatus = readw ( icp->regs + ICP_INTSTATUS );
+	intstatus = readw ( icp->regs + icp->intstatus );
 
 	/* Poll for TX completions, if applicable */
 	if ( intstatus & ICP_INTSTATUS_TXCOMPLETE ) {
 		txstatus = readw ( icp->regs + icp->txstatus );
+		//hack
+		DBGC ( icp, "ICP %p TX status=%04x\n", icp, txstatus );
 		if ( txstatus & ( ICP_TXSTATUS_LATECOLLISION |
 				  ICP_TXSTATUS_MAXCOLLISIONS |
 				  ICP_TXSTATUS_UNDERRUN ) ) {
@@ -879,13 +894,13 @@ static void icplus_poll ( struct net_device *netdev ) {
 	/* Poll for RX completions, if applicable */
 	if ( intstatus & ICP_INTSTATUS_RXDMACOMPLETE ) {
 		writew ( ICP_INTSTATUS_RXDMACOMPLETE,
-			 icp->regs + ICP_INTSTATUS );
+			 icp->regs + icp->intstatus );
 		icplus_poll_rx ( netdev );
 	}
 
 	/* Check link state, if applicable */
 	if ( intstatus & ICP_INTSTATUS_LINKEVENT ) {
-		writew ( ICP_INTSTATUS_LINKEVENT, icp->regs + ICP_INTSTATUS );
+		writew ( ICP_INTSTATUS_LINKEVENT, icp->regs + icp->intstatus );
 		icplus_check_link ( netdev );
 	}
 
