@@ -381,7 +381,7 @@ static int icplus_len64 ( union icplus_descriptor *desc ) {
  * @v offset		Register offset
  * @v address		Base address
  */
-static void icplus_set_base64 ( struct icplus_nic *icp,
+static void icplus_setbase64 ( struct icplus_nic *icp,
 				unsigned int offset, void *base ) {
 	physaddr_t phys = virt_to_bus ( base );
 
@@ -415,7 +415,7 @@ static void icplus_init64 ( struct icplus_nic *icp ) {
 	icp->macctrl0 = ICP64_MACCTRL0;
 	icp->macctrl1 = ICP64_MACCTRL1;
 	icp->txstatus = ICP64_TXSTATUS;
-	icp->setbase = icplus_set_base64;
+	icp->setbase = icplus_setbase64;
 	/* Temporary and needs changing */
 	icp->tx.listptr = ICP_TFDLISTPTR;
 	icp->rx.listptr = ICP_RFDLISTPTR;
@@ -509,7 +509,7 @@ static int icplus_len32 ( union icplus_descriptor *desc ) {
  * @v offset		Register offset
  * @v address		Base address
  */
-static void icplus_set_base32 ( struct icplus_nic *icp,
+static void icplus_setbase32 ( struct icplus_nic *icp,
 				unsigned int offset, void *base ) {
 	physaddr_t phys = virt_to_bus ( base );
 
@@ -536,7 +536,7 @@ static void icplus_init32 ( struct icplus_nic *icp ) {
 	icp->macctrl0 = ICP32_MACCTRL0;
 	icp->macctrl1 = ICP32_MACCTRL1;
 	icp->txstatus = ICP32_TXSTATUS;
-	icp->setbase = icplus_set_base32;
+	icp->setbase = icplus_setbase32;
 	/* Temporary and needs changing */
 	icp->tx.listptr = ICP_TFDLISTPTR;
 	icp->rx.listptr = ICP_RFDLISTPTR;
